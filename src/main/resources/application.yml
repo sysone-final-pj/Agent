@@ -1,8 +1,8 @@
 # Spring Boot 기본 설정
 spring:
   name: monito
-  main:
-    web-application-type: none
+#  main:
+#    web-application-type: none
   application:
     name: monito-agent
 
