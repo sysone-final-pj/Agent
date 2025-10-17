@@ -11,6 +11,7 @@ import com.github.dockerjava.api.command.StatsCmd;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.Statistics;
 import com.github.dockerjava.api.model.StatisticNetworksConfig;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -22,13 +23,10 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class DockerMetricsCollector {
 
     private final DockerClient dockerClient;
-
-    public DockerMetricsCollector(DockerClient dockerClient) {
-        this.dockerClient = dockerClient;
-    }
 
     // 실행 중인 모든 컨테이너의 메트릭을 수집
     public List<MetricsResponseDTO> collectAllContainers() {

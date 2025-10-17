@@ -5,14 +5,21 @@
 package com.agent.monito.controller;
 
 import com.agent.monito.dto.response.VmStatusResponseDTO;
+import com.agent.monito.service.HealthService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/health")
+@RequiredArgsConstructor
 public class HealthController {
-    @GetMapping
-    public VmStatusResponseDTO checkHealth() {
 
-        return new VmStatusResponseDTO("OK", "Agent is running normally");
+    private final HealthService healthService;
+
+    @GetMapping
+    public ResponseEntity<VmStatusResponseDTO> checkHealth() {
+        VmStatusResponseDTO status = healthService.getHealthStatus();
+        return ResponseEntity.ok(status);
     }
 }
