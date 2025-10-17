@@ -14,3 +14,8 @@ agent:
 
 server:
   port: 8080
+
+# 로그 레벨
+logging:
+  level:
+    com.agent.monito.util.com.agent.monito.global.util.JwtUtil: DEBUG
