@@ -2,8 +2,10 @@
  * JWT 토큰의 생성, 파싱, 검증 로직을 담당하는 유틸리티 클래스
  * 비밀키를 .env에서 로드하며 토큰의 유효기간 및 서명 검증을 수행함.
  */
-package com.agent.monito.util;
+package com.agent.monito.global.jwt;
 
+import com.agent.monito.global.exception.ConfigurationException;
+import com.agent.monito.global.exception.ExceptionMessage;
 import io.github.cdimascio.dotenv.Dotenv;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
@@ -16,18 +18,18 @@ import java.util.Date;
 
 @Slf4j
 @Component
-public class JwtUtil {
+public class JwtTokenProvider {
 
     private final String secretKey;
     private String token;
 
-    public JwtUtil() {
+    public JwtTokenProvider() {
         Dotenv dotenv = Dotenv.load();
         this.secretKey = dotenv.get("JWT_SECRET");
 
         if (this.secretKey == null || this.secretKey.isBlank()) {
             log.error("Missing required environment variable: JWT_SECRET");
-            throw new IllegalStateException("JWT_SECRET not found in .env file");
+            throw new ConfigurationException(ExceptionMessage.INVALID_JWT_CONFIGURATION);
         }
 
         log.debug("JWT secret key successfully loaded from .env");

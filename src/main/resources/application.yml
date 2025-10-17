@@ -18,4 +18,4 @@ server:
 # 로그 레벨
 logging:
   level:
-    com.agent.monito.util.JwtUtil: DEBUG
+    com.agent.monito.util.com.agent.monito.global.util.JwtUtil: DEBUG

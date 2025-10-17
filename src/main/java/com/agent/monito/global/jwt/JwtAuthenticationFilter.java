@@ -2,9 +2,8 @@
  * 모든 요청의 HTTP 헤더에서 JWT 토큰을 추출해 유효성을 검사하는 보안 필터
  * 토큰이 유효한 경우 SecurityContext에 인증 정보를 주입함.
  */
-package com.agent.monito.config;
+package com.agent.monito.global.jwt;
 
-import com.agent.monito.util.JwtUtil;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -25,7 +24,7 @@ import java.util.Collections;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtUtil jwtUtil;
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -34,7 +33,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String token = resolveToken(request);
 
-            if (token != null && jwtUtil.validateToken(token)) {
+            if (token != null && jwtTokenProvider.validateToken(token)) {
                 Authentication auth = getAuthentication(token);
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }
@@ -54,7 +53,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private Authentication getAuthentication(String token) {
-        Claims claims = jwtUtil.getClaims(token);
+        Claims claims = jwtTokenProvider.getClaims(token);
         String username = claims.getSubject();
 
         return new UsernamePasswordAuthenticationToken(

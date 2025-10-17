@@ -2,14 +2,18 @@
  * Agent가 설치된 VM(호스트)의 상태 정보를 담는 DTO.
  * CPU, 메모리, 디스크 등 시스템 레벨의 자원 상태를 표현함.
  */
-package com.agent.monito.dto.response;
+package com.agent.monito.domains.node.dto.response;
 
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Builder;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
-@Data
+@Builder
+@ToString
+@NoArgsConstructor
 @AllArgsConstructor
-public class VmStatusResponseDTO {
+public class NodeStatusResponseDTO {
     private String status;
     private String message;
 }

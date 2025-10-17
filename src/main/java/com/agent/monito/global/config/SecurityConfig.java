@@ -2,8 +2,9 @@
  * Spring Security 필터 체인을 설정하는 클래스
  * /api/health는 공개, 그 외 API는 JWT 인증을 요구하며 JwtAuthenticationFilter를 필터 체인에 등록함.
  */
-package com.agent.monito.config;
+package com.agent.monito.global.config;
 
+import com.agent.monito.global.jwt.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

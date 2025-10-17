@@ -2,9 +2,9 @@
  * Docker API를 통해 실행 중인 모든 컨테이너의 CPU, 메모리, 네트워크, 디스크 I/O 등의 메트릭을 수집하는 클래스
  * 각 컨테이너별 실시간 통계를 단발성으로 가져와 DTO 형태로 반환함.
  */
-package com.agent.monito.collector;
+package com.agent.monito.domains.container.collector;
 
-import com.agent.monito.dto.response.MetricsResponseDTO;
+import com.agent.monito.domains.container.dto.response.ContainerMetricsResponseDTO;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.StatsCmd;
@@ -24,13 +24,13 @@ import java.util.concurrent.TimeUnit;
 @Component
 @Slf4j
 @RequiredArgsConstructor
-public class DockerMetricsCollector {
+public class ContainerMetricsCollector {
 
     private final DockerClient dockerClient;
 
     // 실행 중인 모든 컨테이너의 메트릭을 수집
-    public List<MetricsResponseDTO> collectAllContainers() {
-        List<MetricsResponseDTO> responses = new ArrayList<>();
+    public List<ContainerMetricsResponseDTO> collectAllContainers() {
+        List<ContainerMetricsResponseDTO> responses = new ArrayList<>();
 
         try {
             List<Container> containers = dockerClient.listContainersCmd().exec();
@@ -41,7 +41,7 @@ public class DockerMetricsCollector {
                 String containerName = container.getNames()[0].replace("/", "");
                 log.info("Collecting stats for container: {}", containerName);
 
-                MetricsResponseDTO metrics = collectSingleContainer(containerId, containerName);
+                ContainerMetricsResponseDTO metrics = collectSingleContainer(containerId, containerName);
                 responses.add(metrics);
             }
 
@@ -53,10 +53,10 @@ public class DockerMetricsCollector {
     }
 
     // 단일 컨테이너의 Docker Stats 데이터 수집 (요청 시 1회만)
-    private MetricsResponseDTO collectSingleContainer(String containerId, String name) {
+    private ContainerMetricsResponseDTO collectSingleContainer(String containerId, String name) {
         try (StatsCmd statsCmd = dockerClient.statsCmd(containerId).withNoStream(true)) { // 단발성 모드
             final CountDownLatch latch = new CountDownLatch(1);
-            final MetricsResponseDTO[] result = new MetricsResponseDTO[1];
+            final ContainerMetricsResponseDTO[] result = new ContainerMetricsResponseDTO[1];
 
             statsCmd.exec(new ResultCallback.Adapter<Statistics>() {
                 @Override
@@ -66,7 +66,13 @@ public class DockerMetricsCollector {
                     double net = calculateNetworkIO(stats);
                     double disk = calculateDiskIO(stats);
 
-                    result[0] = new MetricsResponseDTO(name, cpu, mem, net, disk);
+                    result[0] = ContainerMetricsResponseDTO.builder()
+                            .containerName(name)
+                            .cpuUsage(cpu)
+                            .memoryUsage(mem)
+                            .networkIO(net)
+                            .diskIO(disk)
+                            .build();
                     latch.countDown();
                 }
 
@@ -84,11 +90,23 @@ public class DockerMetricsCollector {
 
             latch.await(2, TimeUnit.SECONDS);
             return result[0] != null ? result[0]
-                    : new MetricsResponseDTO(name, 0, 0, 0, 0);
+                    : ContainerMetricsResponseDTO.builder()
+                            .containerName(name)
+                            .cpuUsage(0)
+                            .memoryUsage(0)
+                            .networkIO(0)
+                            .diskIO(0)
+                            .build();
 
         } catch (Exception e) {
             log.error("Failed to collect stats for {}", name, e);
-            return new MetricsResponseDTO(name, 0, 0, 0, 0);
+            return ContainerMetricsResponseDTO.builder()
+                    .containerName(name)
+                    .cpuUsage(0)
+                    .memoryUsage(0)
+                    .networkIO(0)
+                    .diskIO(0)
+                    .build();
         }
     }
 

@@ -2,8 +2,10 @@
  * .env 환경변수 기반으로 DockerClient를 Bean으로 등록하는 설정 클래스
  * 개발/운영 환경에 따라 Docker Daemon 접근 정보(TCP, TLS 등)를 안전하게 관리함.
  */
-package com.agent.monito.config;
+package com.agent.monito.global.config;
 
+import com.agent.monito.global.exception.ExceptionMessage;
+import com.agent.monito.global.exception.NotFoundException;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
@@ -28,7 +30,7 @@ public class DockerConfig {
         // 필수 환경 변수 검증
         String dockerHost = dotenv.get("DOCKER_HOST");
         if (dockerHost == null || dockerHost.isBlank()) {
-            throw new IllegalStateException("Missing required environment variable: DOCKER_HOST");
+            throw new NotFoundException(ExceptionMessage.DOCKER_ENV_NOT_FOUND_EXCEPTION);
         }
 
         // 선택적 환경 변수 (기본값 허용)
