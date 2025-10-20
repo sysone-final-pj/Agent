@@ -6,6 +6,7 @@ package com.agent.monito.domains.container.dto.response;
 
 import lombok.*;
 
+@Getter
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
