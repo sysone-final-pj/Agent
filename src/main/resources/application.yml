@@ -1,21 +1,16 @@
 # Spring Boot 기본 설정
 spring:
-  name: monito
-#  main:
-#    web-application-type: none
   application:
     name: monito-agent
 
-# Agent 관련 설정
-agent:
-  host-id: local-test
-  api-key: ${AGENT_API_KEY:}
-  server-url: http://localhost:8080
+  profiles:
+    active: dev
 
 server:
   port: 8080
 
-# 로그 레벨
 logging:
   level:
+    root: INFO
+    com.agent.monito: DEBUG
     com.agent.monito.global.jwt.JwtTokenProvider: DEBUG

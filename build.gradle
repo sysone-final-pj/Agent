@@ -31,8 +31,6 @@ dependencies {
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-	// dotenv-java (.env 파일 로드)
-	implementation 'io.github.cdimascio:dotenv-java:3.0.0'
 	// Docker Java API - OkHttp transport
 	implementation 'com.github.docker-java:docker-java:3.3.4'
 	implementation 'com.github.docker-java:docker-java-transport-okhttp:3.3.4'

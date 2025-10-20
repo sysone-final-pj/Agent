@@ -1,0 +1,26 @@
+# 개발 환경 설정
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+# Docker 설정 (로컬 개발환경)
+docker:
+  host: ${DOCKER_HOST:tcp://localhost:2375}
+  tls-verify: ${DOCKER_TLS_VERIFY:false}
+  cert-path: ${DOCKER_CERT_PATH:}
+
+# JWT 설정
+jwt:
+  secret: ${JWT_SECRET:my-super-secret-key-for-agent-authentication-1234567890}
+
+# 서버 포트
+server:
+  port: 8080
+
+# 로그 레벨 (개발환경에서는 DEBUG 사용)
+logging:
+  level:
+    root: INFO
+    com.agent.monito: DEBUG
+    com.agent.monito.global.jwt.JwtTokenProvider: DEBUG

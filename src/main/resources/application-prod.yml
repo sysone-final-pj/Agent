@@ -1,0 +1,26 @@
+# 운영 환경 설정
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+# Docker 설정 (운영환경)
+docker:
+  host: ${DOCKER_HOST:unix:///var/run/docker.sock}
+  tls-verify: ${DOCKER_TLS_VERIFY:true}
+  cert-path: ${DOCKER_CERT_PATH:/etc/docker/certs}
+
+# JWT 설정
+jwt:
+  secret: ${JWT_SECRET}
+
+# 서버 포트
+server:
+  port: ${SERVER_PORT:8080}
+
+# 로그 레벨 (운영환경에서는 INFO/WARN 레벨 사용)
+logging:
+  level:
+    root: INFO
+    com.agent.monito: INFO
+    com.agent.monito.global.jwt.JwtTokenProvider: WARN

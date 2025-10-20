@@ -1,0 +1,21 @@
+# 테스트 환경 설정
+spring:
+  config:
+    activate:
+      on-profile: test
+
+# JWT 설정 (테스트용)
+jwt:
+  secret: test-secret-key-for-unit-testing-1234567890
+
+# Docker 설정 (테스트용 - 실제로 연결하지 않음)
+docker:
+  host: tcp://localhost:2375
+  tls-verify: false
+  cert-path: ""
+
+# 로그 레벨 (테스트 시 간소화)
+logging:
+  level:
+    root: WARN
+    com.agent.monito: INFO
