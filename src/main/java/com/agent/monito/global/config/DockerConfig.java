@@ -1,17 +1,15 @@
 /**
- * .env 환경변수 기반으로 DockerClient를 Bean으로 등록하는 설정 클래스
+ * application.yml 기반으로 DockerClient를 Bean으로 등록하는 설정 클래스
  * 개발/운영 환경에 따라 Docker Daemon 접근 정보(TCP, TLS 등)를 안전하게 관리함.
  */
 package com.agent.monito.global.config;
 
-import com.agent.monito.global.exception.ExceptionMessage;
-import com.agent.monito.global.exception.NotFoundException;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.okhttp.OkDockerHttpClient;
-import io.github.cdimascio.dotenv.Dotenv;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,24 +17,17 @@ import org.springframework.context.annotation.Configuration;
 @Slf4j
 public class DockerConfig {
 
+    @Value("${docker.host}")
+    private String dockerHost;
+
+    @Value("${docker.tls-verify:false}")
+    private boolean tlsVerify;
+
+    @Value("${docker.cert-path:}")
+    private String certPath;
+
     @Bean
     public DockerClient dockerClient() {
-
-        // .env 파일 로드
-        Dotenv dotenv = Dotenv.configure()
-                .ignoreIfMissing()  // (선택) .env 파일이 없을 경우 무시
-                .load();
-
-        // 필수 환경 변수 검증
-        String dockerHost = dotenv.get("DOCKER_HOST");
-        if (dockerHost == null || dockerHost.isBlank()) {
-            throw new NotFoundException(ExceptionMessage.DOCKER_ENV_NOT_FOUND_EXCEPTION);
-        }
-
-        // 선택적 환경 변수 (기본값 허용)
-        boolean tlsVerify = Boolean.parseBoolean(dotenv.get("DOCKER_TLS_VERIFY", "false"));
-        String certPath = dotenv.get("DOCKER_CERT_PATH", "");
-
         // Docker 설정 구성
         DefaultDockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder()
                 .withDockerHost(dockerHost)
@@ -49,7 +40,6 @@ public class DockerConfig {
                 .sslConfig(config.getSSLConfig())
                 .build();
 
-        // 로깅 (운영환경에서는 INFO 이하 레벨로 관리 가능)
         log.info("Docker Configuration Loaded:");
         log.info("   • Host       : {}", dockerHost);
         log.info("   • TLS Verify : {}", tlsVerify);
