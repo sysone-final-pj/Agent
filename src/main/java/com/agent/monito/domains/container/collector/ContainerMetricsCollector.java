@@ -4,7 +4,7 @@
  */
 package com.agent.monito.domains.container.collector;
 
-import com.agent.monito.domains.container.dto.response.ContainerMetricsResponseDTO;
+import com.agent.monito.domains.container.dto.response.*;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.StatsCmd;
@@ -47,6 +47,32 @@ public class ContainerMetricsCollector {
 
         } catch (Exception e) {
             log.error("Error collecting container stats", e);
+        }
+
+        return responses;
+    }
+
+    // 실행 중인 모든 컨테이너의 상세 메트릭을 수집
+    public List<DetailedContainerMetricsResponseDTO> collectAllDetailedContainers() {
+        List<DetailedContainerMetricsResponseDTO> responses = new ArrayList<>();
+
+        try {
+            List<Container> containers = dockerClient.listContainersCmd().exec();
+            log.info("Found {} running containers", containers.size());
+
+            for (Container container : containers) {
+                String containerId = container.getId();
+                String containerName = container.getNames()[0].replace("/", "");
+                String status = container.getStatus();
+                String state = container.getState();
+                log.info("Collecting detailed stats for container: {}", containerName);
+
+                DetailedContainerMetricsResponseDTO metrics = collectSingleDetailedContainer(containerId, containerName, status, state);
+                responses.add(metrics);
+            }
+
+        } catch (Exception e) {
+            log.error("Error collecting detailed container stats", e);
         }
 
         return responses;
@@ -169,5 +195,204 @@ public class ContainerMetricsCollector {
         return stats.getBlkioStats().getIoServiceBytesRecursive().stream()
                 .mapToDouble(e -> e.getValue() != null ? e.getValue() : 0.0)
                 .sum() / 1024.0;
+    }
+
+    // 단일 컨테이너의 상세 메트릭 수집
+    private DetailedContainerMetricsResponseDTO collectSingleDetailedContainer(String containerHash, String name, String status, String state) {
+        try (StatsCmd statsCmd = dockerClient.statsCmd(containerHash).withNoStream(true)) {
+            final CountDownLatch latch = new CountDownLatch(1);
+            final DetailedContainerMetricsResponseDTO[] result = new DetailedContainerMetricsResponseDTO[1];
+
+            statsCmd.exec(new ResultCallback.Adapter<Statistics>() {
+                @Override
+                public void onNext(Statistics stats) {
+                    result[0] = DetailedContainerMetricsResponseDTO.builder()
+                            .containerHash(containerHash)
+                            .containerName(name)
+                            .status(status)
+                            .state(state)
+                            .cpu(buildCpuMetrics(stats, containerHash))
+                            .memory(buildMemoryMetrics(stats))
+                            .network(buildNetworkMetrics(stats))
+                            .blockIO(buildBlockIOMetrics(stats))
+                            .build();
+                    latch.countDown();
+                }
+
+                @Override
+                public void onError(Throwable throwable) {
+                    log.error("Error while collecting detailed stats for {}", name, throwable);
+                    latch.countDown();
+                }
+
+                @Override
+                public void onComplete() {
+                    log.debug("Detailed stats collection completed for {}", name);
+                }
+            });
+
+            latch.await(2, TimeUnit.SECONDS);
+            return result[0] != null ? result[0] : buildEmptyDetailedMetrics(containerHash, name, status);
+
+        } catch (Exception e) {
+            log.error("Failed to collect detailed stats for {}", name, e);
+            return buildEmptyDetailedMetrics(containerHash, name, status);
+        }
+    }
+
+    // CPU 상세 메트릭 빌드 - 원시 데이터만 수집
+    private CpuMetricsResponseDTO buildCpuMetrics(Statistics stats, String containerId) {
+        if (stats.getCpuStats() == null) {
+            return CpuMetricsResponseDTO.builder().build();
+        }
+
+        com.github.dockerjava.api.model.CpuStatsConfig cpuStats = stats.getCpuStats();
+        com.github.dockerjava.api.model.CpuUsageConfig cpuUsage = cpuStats.getCpuUsage();
+
+        // 원시 데이터 추출 (계산 없음)
+        Long totalUsage = cpuUsage != null ? cpuUsage.getTotalUsage() : null;
+        Long systemUsage = cpuStats.getSystemCpuUsage();
+        Long onlineCpus = cpuStats.getOnlineCpus();
+
+        // User/System CPU 사용량
+        Long cpuUser = null;
+        Long cpuSystem = null;
+        if (cpuUsage != null) {
+            cpuUser = cpuUsage.getUsageInUsermode();
+            cpuSystem = cpuUsage.getUsageInKernelmode();
+        }
+
+        // Throttling 정보
+        com.github.dockerjava.api.model.ThrottlingDataConfig throttlingData = cpuStats.getThrottlingData();
+        Long throttlingPeriods = throttlingData != null ? throttlingData.getPeriods() : null;
+        Long throttledPeriods = throttlingData != null ? throttlingData.getThrottledPeriods() : null;
+        Long throttledTime = throttlingData != null ? throttlingData.getThrottledTime() : null;
+
+        // CPU Quota와 Period는 inspect API에서 가져옴
+        Long cpuQuota = null;
+        Long cpuPeriod = null;
+        try {
+            com.github.dockerjava.api.command.InspectContainerResponse inspectResponse =
+                dockerClient.inspectContainerCmd(containerId).exec();
+            com.github.dockerjava.api.model.HostConfig hostConfig = inspectResponse.getHostConfig();
+            if (hostConfig != null) {
+                cpuQuota = hostConfig.getCpuQuota();
+                cpuPeriod = hostConfig.getCpuPeriod();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get CPU quota/period for container {}: {}", containerId, e.getMessage());
+        }
+
+        return CpuMetricsResponseDTO.builder()
+                .cpuUsageTotal(totalUsage)
+                .cpuUser(cpuUser)
+                .cpuSystem(cpuSystem)
+                .systemCpuUsage(systemUsage)
+                .onlineCpus(onlineCpus)
+                .cpuQuota(cpuQuota)
+                .cpuPeriod(cpuPeriod)
+                .throttlingPeriods(throttlingPeriods)
+                .throttledPeriods(throttledPeriods)
+                .throttledTime(throttledTime)
+                .build();
+    }
+
+    // Memory 상세 메트릭 빌드 - 원시 데이터만 수집
+    private MemoryMetricsResponseDTO buildMemoryMetrics(Statistics stats) {
+        if (stats.getMemoryStats() == null) {
+            return MemoryMetricsResponseDTO.builder().build();
+        }
+
+        var memStats = stats.getMemoryStats();
+
+        // 원시 데이터 추출 (계산 없음)
+        Long memUsage = memStats.getUsage();
+        Long memLimit = memStats.getLimit();
+        Long memMaxUsage = memStats.getMaxUsage();
+
+        return MemoryMetricsResponseDTO.builder()
+                .memUsage(memUsage)
+                .memLimit(memLimit)
+                .memMaxUsage(memMaxUsage)
+                .build();
+    }
+
+    // Network 상세 메트릭 빌드 - 원시 데이터만 수집
+    private NetworkMetricsResponseDTO buildNetworkMetrics(Statistics stats) {
+        if (stats.getNetworks() == null || stats.getNetworks().isEmpty()) {
+            return NetworkMetricsResponseDTO.builder().build();
+        }
+
+        long rxBytes = 0L;
+        long txBytes = 0L;
+        long rxPackets = 0L;
+        long txPackets = 0L;
+        long rxErrors = 0L;
+        long txErrors = 0L;
+        long rxDropped = 0L;
+        long txDropped = 0L;
+
+        // 모든 네트워크 인터페이스의 원시 데이터를 합산
+        for (Map.Entry<String, StatisticNetworksConfig> entry : stats.getNetworks().entrySet()) {
+            var net = entry.getValue();
+            if (net.getRxBytes() != null) rxBytes += net.getRxBytes();
+            if (net.getTxBytes() != null) txBytes += net.getTxBytes();
+            if (net.getRxPackets() != null) rxPackets += net.getRxPackets();
+            if (net.getTxPackets() != null) txPackets += net.getTxPackets();
+            if (net.getRxErrors() != null) rxErrors += net.getRxErrors();
+            if (net.getTxErrors() != null) txErrors += net.getTxErrors();
+            if (net.getRxDropped() != null) rxDropped += net.getRxDropped();
+            if (net.getTxDropped() != null) txDropped += net.getTxDropped();
+        }
+
+        return NetworkMetricsResponseDTO.builder()
+                .rxBytes(rxBytes)
+                .txBytes(txBytes)
+                .rxPackets(rxPackets)
+                .txPackets(txPackets)
+                .rxErrors(rxErrors)
+                .txErrors(txErrors)
+                .rxDropped(rxDropped)
+                .txDropped(txDropped)
+                .build();
+    }
+
+    // Block I/O 상세 메트릭 빌드 - 원시 데이터만 수집
+    private BlockIOMetricsResponseDTO buildBlockIOMetrics(Statistics stats) {
+        if (stats.getBlkioStats() == null || stats.getBlkioStats().getIoServiceBytesRecursive() == null) {
+            return BlockIOMetricsResponseDTO.builder().build();
+        }
+
+        long blkRead = 0L;
+        long blkWrite = 0L;
+
+        // Read/Write 원시 데이터 추출
+        for (var entry : stats.getBlkioStats().getIoServiceBytesRecursive()) {
+            if (entry.getOp() != null && entry.getValue() != null) {
+                if (entry.getOp().equalsIgnoreCase("Read")) {
+                    blkRead += entry.getValue();
+                } else if (entry.getOp().equalsIgnoreCase("Write")) {
+                    blkWrite += entry.getValue();
+                }
+            }
+        }
+
+        return BlockIOMetricsResponseDTO.builder()
+                .blkRead(blkRead)
+                .blkWrite(blkWrite)
+                .build();
+    }
+
+    // 빈 상세 메트릭 객체 생성 (에러 발생 시)
+    private DetailedContainerMetricsResponseDTO buildEmptyDetailedMetrics(String containerHash, String name, String status) {
+        return DetailedContainerMetricsResponseDTO.builder()
+                .containerHash(containerHash)
+                .containerName(name)
+                .status(status)
+                .cpu(CpuMetricsResponseDTO.builder().build())
+                .memory(MemoryMetricsResponseDTO.builder().build())
+                .network(NetworkMetricsResponseDTO.builder().build())
+                .blockIO(BlockIOMetricsResponseDTO.builder().build())
+                .build();
     }
 }

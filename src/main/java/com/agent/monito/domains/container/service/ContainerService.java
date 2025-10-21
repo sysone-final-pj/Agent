@@ -6,6 +6,7 @@ package com.agent.monito.domains.container.service;
 
 import com.agent.monito.domains.container.collector.ContainerMetricsCollector;
 import com.agent.monito.domains.container.dto.response.ContainerMetricsResponseDTO;
+import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -19,5 +20,9 @@ public class ContainerService {
 
     public List<ContainerMetricsResponseDTO> collectAllContainerMetrics() {
         return containerMetricsCollector.collectAllContainers();
+    }
+
+    public List<DetailedContainerMetricsResponseDTO> collectAllDetailedContainerMetrics() {
+        return containerMetricsCollector.collectAllDetailedContainers();
     }
 }
