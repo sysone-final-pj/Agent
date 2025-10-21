@@ -14,6 +14,22 @@ docker:
 jwt:
   secret: ${JWT_SECRET:my-super-secret-key-for-agent-authentication-1234567890}
 
+# Backend 서버 설정
+backend:
+  host: ${BE_HOST:http://localhost:8081}
+  api:
+    metrics: /api/agent/metrics
+
+# 스케줄링 설정
+scheduler:
+  metrics-push:
+    fixed-delay: 5000      # 5초마다 실행 (밀리초)
+    initial-delay: 10000   # 애플리케이션 시작 후 10초 뒤 첫 실행
+  thread-pool:
+    core-size: 2           # 기본 스레드 수
+    max-size: 5            # 최대 스레드 수
+    queue-capacity: 10     # 큐 용량
+
 # 서버 포트
 server:
   port: 8080
