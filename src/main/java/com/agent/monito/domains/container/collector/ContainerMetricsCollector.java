@@ -7,19 +7,26 @@ package com.agent.monito.domains.container.collector;
 import com.agent.monito.domains.container.dto.response.*;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
+import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.command.StatsCmd;
 import com.github.dockerjava.api.model.Container;
+import com.github.dockerjava.api.model.CpuStatsConfig;
+import com.github.dockerjava.api.model.CpuUsageConfig;
+import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.Statistics;
 import com.github.dockerjava.api.model.StatisticNetworksConfig;
+import com.github.dockerjava.api.model.ThrottlingDataConfig;
+import java.util.Map.Entry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
@@ -28,54 +35,76 @@ public class ContainerMetricsCollector {
 
     private final DockerClient dockerClient;
 
-    // 실행 중인 모든 컨테이너의 메트릭을 수집
+    // 실행 중인 모든 컨테이너의 메트릭을 병렬로 수집
     public List<ContainerMetricsResponseDTO> collectAllContainers() {
-        List<ContainerMetricsResponseDTO> responses = new ArrayList<>();
-
         try {
             List<Container> containers = dockerClient.listContainersCmd().exec();
             log.info("Found {} running containers", containers.size());
 
-            for (Container container : containers) {
-                String containerId = container.getId();
-                String containerName = container.getNames()[0].replace("/", "");
-                log.info("Collecting stats for container: {}", containerName);
+            // 모든 컨테이너를 병렬로 수집
+            List<CompletableFuture<ContainerMetricsResponseDTO>> futures = containers.stream()
+                    .map(container -> CompletableFuture.supplyAsync(() -> {
+                        String containerId = container.getId();
+                        String containerName = container.getNames()[0].replace("/", "");
+                        log.info("Collecting stats for container: {}", containerName);
+                        return collectSingleContainer(containerId, containerName);
+                    }))
+                    .collect(Collectors.toList());
 
-                ContainerMetricsResponseDTO metrics = collectSingleContainer(containerId, containerName);
-                responses.add(metrics);
-            }
+            // 모든 결과를 기다린 후 반환 (개별 컨테이너 실패 시에도 계속 진행)
+            return futures.stream()
+                    .map(future -> {
+                        try {
+                            return future.join();
+                        } catch (Exception e) {
+                            log.error("Failed to collect container metrics", e);
+                            return null;
+                        }
+                    })
+                    .filter(metrics -> metrics != null)
+                    .collect(Collectors.toList());
 
         } catch (Exception e) {
             log.error("Error collecting container stats", e);
+            return new ArrayList<>();
         }
-
-        return responses;
     }
 
-    // 실행 중인 모든 컨테이너의 상세 메트릭을 수집
+    // 실행 중인 모든 컨테이너의 상세 메트릭을 병렬로 수집
     public List<DetailedContainerMetricsResponseDTO> collectAllDetailedContainers() {
-        List<DetailedContainerMetricsResponseDTO> responses = new ArrayList<>();
-
         try {
             List<Container> containers = dockerClient.listContainersCmd().exec();
             log.info("Found {} running containers", containers.size());
 
-            for (Container container : containers) {
-                String containerId = container.getId();
-                String containerName = container.getNames()[0].replace("/", "");
-                String status = container.getStatus();
-                String state = container.getState();
-                log.info("Collecting detailed stats for container: {}", containerName);
+            // 모든 컨테이너를 병렬로 수집
+            List<CompletableFuture<DetailedContainerMetricsResponseDTO>> futures = containers.stream()
+                    .map(container -> CompletableFuture.supplyAsync(() -> {
+                        String containerId = container.getId();
+                        String containerName = container.getNames()[0].replace("/", "");
+                        String status = container.getStatus();
+                        String state = container.getState();
+                        log.info("Collecting detailed stats for container: {}", containerName);
+                        return collectSingleDetailedContainer(containerId, containerName, status, state);
+                    }))
+                    .collect(Collectors.toList());
 
-                DetailedContainerMetricsResponseDTO metrics = collectSingleDetailedContainer(containerId, containerName, status, state);
-                responses.add(metrics);
-            }
+            // 모든 결과를 기다린 후 반환 (개별 컨테이너 실패 시에도 계속 진행)
+            return futures.stream()
+                    .map(future -> {
+                        try {
+                            return future.join();
+                        } catch (Exception e) {
+                            log.error("Failed to collect detailed container metrics", e);
+                            return null;
+                        }
+                    })
+                    .filter(metrics -> metrics != null)
+                    .collect(Collectors.toList());
 
         } catch (Exception e) {
             log.error("Error collecting detailed container stats", e);
+            return new ArrayList<>();
         }
-
-        return responses;
     }
 
     // 단일 컨테이너의 Docker Stats 데이터 수집 (요청 시 1회만)
@@ -177,7 +206,7 @@ public class ContainerMetricsCollector {
         if (stats.getNetworks() == null) return 0.0;
 
         double total = 0.0;
-        for (Map.Entry<String, StatisticNetworksConfig> entry : stats.getNetworks().entrySet()) {
+        for (Entry<String, StatisticNetworksConfig> entry : stats.getNetworks().entrySet()) {
             var net = entry.getValue();
             if (net.getRxBytes() != null) total += net.getRxBytes();
             if (net.getTxBytes() != null) total += net.getTxBytes();
@@ -246,8 +275,8 @@ public class ContainerMetricsCollector {
             return CpuMetricsResponseDTO.builder().build();
         }
 
-        com.github.dockerjava.api.model.CpuStatsConfig cpuStats = stats.getCpuStats();
-        com.github.dockerjava.api.model.CpuUsageConfig cpuUsage = cpuStats.getCpuUsage();
+        CpuStatsConfig cpuStats = stats.getCpuStats();
+        CpuUsageConfig cpuUsage = cpuStats.getCpuUsage();
 
         // 원시 데이터 추출 (계산 없음)
         Long totalUsage = cpuUsage != null ? cpuUsage.getTotalUsage() : null;
@@ -263,7 +292,7 @@ public class ContainerMetricsCollector {
         }
 
         // Throttling 정보
-        com.github.dockerjava.api.model.ThrottlingDataConfig throttlingData = cpuStats.getThrottlingData();
+        ThrottlingDataConfig throttlingData = cpuStats.getThrottlingData();
         Long throttlingPeriods = throttlingData != null ? throttlingData.getPeriods() : null;
         Long throttledPeriods = throttlingData != null ? throttlingData.getThrottledPeriods() : null;
         Long throttledTime = throttlingData != null ? throttlingData.getThrottledTime() : null;
@@ -272,9 +301,9 @@ public class ContainerMetricsCollector {
         Long cpuQuota = null;
         Long cpuPeriod = null;
         try {
-            com.github.dockerjava.api.command.InspectContainerResponse inspectResponse =
+            InspectContainerResponse inspectResponse =
                 dockerClient.inspectContainerCmd(containerId).exec();
-            com.github.dockerjava.api.model.HostConfig hostConfig = inspectResponse.getHostConfig();
+            HostConfig hostConfig = inspectResponse.getHostConfig();
             if (hostConfig != null) {
                 cpuQuota = hostConfig.getCpuQuota();
                 cpuPeriod = hostConfig.getCpuPeriod();
@@ -333,7 +362,7 @@ public class ContainerMetricsCollector {
         long txDropped = 0L;
 
         // 모든 네트워크 인터페이스의 원시 데이터를 합산
-        for (Map.Entry<String, StatisticNetworksConfig> entry : stats.getNetworks().entrySet()) {
+        for (Entry<String, StatisticNetworksConfig> entry : stats.getNetworks().entrySet()) {
             var net = entry.getValue();
             if (net.getRxBytes() != null) rxBytes += net.getRxBytes();
             if (net.getTxBytes() != null) txBytes += net.getTxBytes();
