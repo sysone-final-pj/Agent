@@ -20,7 +20,7 @@ import java.time.Duration;
 @Slf4j
 public class WebClientConfig {
 
-    @Value("${backend.host}")
+    @Value("${backend.host.url}")
     private String backendHost;
 
     @Bean

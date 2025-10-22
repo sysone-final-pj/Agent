@@ -1,7 +1,10 @@
 /**
- * 주기적으로 컨테이너 메트릭을 수집하여 Backend 서버로 전송하는 스케줄러
- * application.yml의 scheduler.metrics-push 설정값에 따라 실행 주기가 결정됨.
- * WebClient를 통해 비동기 방식으로 데이터를 전송함.
+ * [DEPRECATED] REST API 방식의 메트릭 전송 스케줄러
+ *
+ * 현재는 WebSocket 방식으로 전환되어 사용하지 않음.
+ * AgentWebSocketClient가 동일한 기능을 WebSocket으로 수행함.
+ *
+ * 이 파일은 향후 제거 예정.
  */
 package com.agent.monito.domains.container.scheduler;
 
@@ -17,7 +20,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 
-@Component
+// @Component  // ← 비활성화: WebSocket 방식으로 전환됨
 @Slf4j
 @RequiredArgsConstructor
 public class MetricsPushScheduler {

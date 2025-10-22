@@ -1,13 +1,11 @@
-# Spring Boot 기본 설정
 spring:
   application:
     name: monito-agent
-
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:dev}
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 logging:
   level:
