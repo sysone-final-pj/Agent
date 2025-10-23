@@ -1,8 +1,19 @@
-# 개발 환경 설정
+# 로컬 개발 환경 설정
 spring:
   config:
     activate:
       on-profile: dev
+
+# Agent 인증 정보
+agent:
+  key: ${AGENT_KEY:999d1378-1346-4b7b-87ab-b17a8bf439fc}
+
+# Backend 웹소켓 서버 설정
+backend:
+  websocket:
+    url: ws://localhost:8081  # 백엔드 웹소켓 서버 주소
+  host:
+    url: tcp://localhost:8081
 
 # Docker 설정 (로컬 개발환경)
 docker:
@@ -14,9 +25,15 @@ docker:
 jwt:
   secret: ${JWT_SECRET:my-super-secret-key-for-agent-authentication-1234567890}
 
-# 서버 포트
-server:
-  port: 8080
+# 스케줄링 설정
+scheduler:
+  metrics-push:
+    fixed-delay: 5000      # 5초마다 실행 (밀리초)
+    initial-delay: 10000   # 애플리케이션 시작 후 10초 뒤 첫 실행
+  thread-pool:
+    core-size: 2           # 기본 스레드 수
+    max-size: 5            # 최대 스레드 수
+    queue-capacity: 10     # 큐 용량
 
 # 로그 레벨 (개발환경에서는 DEBUG 사용)
 logging:
@@ -24,3 +41,6 @@ logging:
     root: INFO
     com.agent.monito: DEBUG
     com.agent.monito.global.jwt.JwtTokenProvider: DEBUG
+
+# 참고: 여러 Agent를 동시에 실행하려면
+# java -jar agent.jar --spring.profiles.active=dev --server.port=8082 --agent.id=test-agent-002

@@ -4,6 +4,7 @@
  */
 package com.agent.monito.domains.container.controller;
 
+import com.agent.monito.domains.container.service.ContainerService;
 import com.agent.monito.global.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.agent.monito.domains.container.dto.response.ContainerMetricsResponseDTO;
-import com.agent.monito.domains.container.service.ContainerService;
+import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
 
 import java.util.List;
 
@@ -26,5 +27,11 @@ public class ContainerController {
     public ApiResponse<List<ContainerMetricsResponseDTO>> getAllMetrics() {
         List<ContainerMetricsResponseDTO> metrics = containerService.collectAllContainerMetrics();
         return ApiResponse.ok(metrics, "컨테이너 정보 응답");
+    }
+
+    @GetMapping("/stats")
+    public ApiResponse<List<DetailedContainerMetricsResponseDTO>> getAllDetailedStats() {
+        List<DetailedContainerMetricsResponseDTO> metrics = containerService.collectAllDetailedContainerMetrics();
+        return ApiResponse.ok(metrics, "컨테이너 상세 메트릭 응답");
     }
 }
