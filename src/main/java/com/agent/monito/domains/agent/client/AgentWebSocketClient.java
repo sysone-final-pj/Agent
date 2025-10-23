@@ -30,11 +30,8 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
     private final ContainerService containerService;
     private final ObjectMapper objectMapper;
 
-    @Value("${agent.id}")
-    private String agentId;
-
-    @Value("${agent.password}")
-    private String password;
+    @Value("${agent.key}")
+    private String agentKey;
 
     @Value("${backend.websocket.url}")
     private String backendUrl;
@@ -45,8 +42,8 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
     @PostConstruct
     public void init() {
         log.info("═══════════════════════════════════════");
-        log.info("🚀 Agent 시작");
-        log.info("   Agent ID: {}", agentId);
+        log.info("Agent 시작");
+        log.info("   Agent Key: {}", agentKey);
         log.info("   Backend URL: {}", backendUrl);
         log.info("═══════════════════════════════════════");
 
@@ -74,7 +71,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
         this.session = session;
 
         log.info("═══════════════════════════════════════");
-        log.info("✅ Backend 연결 성공!");
+        log.info("Backend 연결 성공!");
         log.info("   Session ID: {}", session.getId());
         log.info("   시각: {}", getCurrentTime());
         log.info("═══════════════════════════════════════");
@@ -87,8 +84,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
         try {
             Map<String, Object> authMsg = Map.of(
                     "type", "AUTH",
-                    "agentId", agentId,
-                    "password", password,
+                    "agentKey", agentKey,
                     "timestamp", System.currentTimeMillis()
             );
 
@@ -96,7 +92,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
             session.sendMessage(new TextMessage(json));
 
             log.info("인증 요청 전송");
-            log.info("   Agent ID: {}", agentId);
+            log.info("   Agent Key: {}", agentKey);
 
         } catch (Exception e) {
             log.error("인증 요청 실패", e);
@@ -146,7 +142,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
 
         log.info("═══════════════════════════════════════");
         log.info("인증 성공!");
-        log.info("   Agent ID: {}", data.get("agentId"));
+        log.info("   Agent Key: {}", data.get("agentKey"));
         log.info("   메시지: {}", data.get("message"));
         log.info("   메트릭 전송 시작...");
         log.info("═══════════════════════════════════════");
@@ -198,7 +194,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
             Map<String, Object> message = Map.of(
                     "type", "METRICS",
                     "data", Map.of(
-                            "agentId", agentId,
+                            "agentKey", agentKey,
                             "metrics", metrics,
                             "timestamp", System.currentTimeMillis()
                     )

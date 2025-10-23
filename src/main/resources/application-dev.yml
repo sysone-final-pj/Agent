@@ -4,10 +4,9 @@ spring:
     activate:
       on-profile: dev
 
-# Agent 인증 정보 (나중에 Jasypt로 암호화 예정)
+# Agent 인증 정보
 agent:
-  id: ${AGENT_ID:test-agent-001}
-  password: ${AGENT_PASSWORD:test123}
+  key: ${AGENT_KEY:999d1378-1346-4b7b-87ab-b17a8bf439fc}
 
 # Backend 웹소켓 서버 설정
 backend:
