@@ -11,5 +11,5 @@ import lombok.*;
 public class MemoryMetricsResponseDTO {
     private Long memUsage;                  // 현재 메모리 사용량 (bytes)
     private Long memLimit;                  // 메모리 제한 (bytes)
-    private Long memMaxUsage;               // 최대 메모리 사용량 (bytes)
+    private Long memMaxUsage;               // 최대 메모리 사용량 (bytes) - Cgroup v2에서는 0
 }

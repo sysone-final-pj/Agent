@@ -9,10 +9,12 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.command.StatsCmd;
+import com.github.dockerjava.api.model.BlkioStatEntry;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.CpuStatsConfig;
 import com.github.dockerjava.api.model.CpuUsageConfig;
 import com.github.dockerjava.api.model.HostConfig;
+import com.github.dockerjava.api.model.MemoryStatsConfig;
 import com.github.dockerjava.api.model.Statistics;
 import com.github.dockerjava.api.model.StatisticNetworksConfig;
 import com.github.dockerjava.api.model.ThrottlingDataConfig;
@@ -35,6 +37,9 @@ public class ContainerMetricsCollector {
 
     private final DockerClient dockerClient;
 
+    // Cgroup v2 환경 여부 (한 번만 체크)
+    private Boolean isCgroupV2 = null;
+
     // 실행 중인 모든 컨테이너의 메트릭을 병렬로 수집
     public List<ContainerMetricsResponseDTO> collectAllContainers() {
         try {
@@ -44,10 +49,10 @@ public class ContainerMetricsCollector {
             // 모든 컨테이너를 병렬로 수집
             List<CompletableFuture<ContainerMetricsResponseDTO>> futures = containers.stream()
                     .map(container -> CompletableFuture.supplyAsync(() -> {
-                        String containerId = container.getId();
+                        String containerHash = container.getId();
                         String containerName = container.getNames()[0].replace("/", "");
                         log.info("Collecting stats for container: {}", containerName);
-                        return collectSingleContainer(containerId, containerName);
+                        return collectSingleContainer(containerHash, containerName);
                     }))
                     .collect(Collectors.toList());
 
@@ -72,6 +77,7 @@ public class ContainerMetricsCollector {
 
     // 실행 중인 모든 컨테이너의 상세 메트릭을 병렬로 수집
     public List<DetailedContainerMetricsResponseDTO> collectAllDetailedContainers() {
+        long startTime = System.currentTimeMillis();
         try {
             List<Container> containers = dockerClient.listContainersCmd().exec();
             log.info("Found {} running containers", containers.size());
@@ -79,17 +85,17 @@ public class ContainerMetricsCollector {
             // 모든 컨테이너를 병렬로 수집
             List<CompletableFuture<DetailedContainerMetricsResponseDTO>> futures = containers.stream()
                     .map(container -> CompletableFuture.supplyAsync(() -> {
-                        String containerId = container.getId();
+                        String containerHash = container.getId();
                         String containerName = container.getNames()[0].replace("/", "");
                         String status = container.getStatus();
                         String state = container.getState();
                         log.info("Collecting detailed stats for container: {}", containerName);
-                        return collectSingleDetailedContainer(containerId, containerName, status, state);
+                        return collectSingleDetailedContainer(containerHash, containerName, status, state);
                     }))
                     .collect(Collectors.toList());
 
             // 모든 결과를 기다린 후 반환 (개별 컨테이너 실패 시에도 계속 진행)
-            return futures.stream()
+            List<DetailedContainerMetricsResponseDTO> results = futures.stream()
                     .map(future -> {
                         try {
                             return future.join();
@@ -101,6 +107,10 @@ public class ContainerMetricsCollector {
                     .filter(metrics -> metrics != null)
                     .collect(Collectors.toList());
 
+            long totalTime = System.currentTimeMillis() - startTime;
+            log.info("✓ Collected metrics for {} containers in {}ms", results.size(), totalTime);
+            return results;
+
         } catch (Exception e) {
             log.error("Error collecting detailed container stats", e);
             return new ArrayList<>();
@@ -108,8 +118,8 @@ public class ContainerMetricsCollector {
     }
 
     // 단일 컨테이너의 Docker Stats 데이터 수집 (요청 시 1회만)
-    private ContainerMetricsResponseDTO collectSingleContainer(String containerId, String name) {
-        try (StatsCmd statsCmd = dockerClient.statsCmd(containerId).withNoStream(true)) { // 단발성 모드
+    private ContainerMetricsResponseDTO collectSingleContainer(String containerHash, String name) {
+        try (StatsCmd statsCmd = dockerClient.statsCmd(containerHash).withNoStream(true)) { // 단발성 모드
             final CountDownLatch latch = new CountDownLatch(1);
             final ContainerMetricsResponseDTO[] result = new ContainerMetricsResponseDTO[1];
 
@@ -207,7 +217,7 @@ public class ContainerMetricsCollector {
 
         double total = 0.0;
         for (Entry<String, StatisticNetworksConfig> entry : stats.getNetworks().entrySet()) {
-            var net = entry.getValue();
+            StatisticNetworksConfig net = entry.getValue();
             if (net.getRxBytes() != null) total += net.getRxBytes();
             if (net.getTxBytes() != null) total += net.getTxBytes();
         }
@@ -228,6 +238,7 @@ public class ContainerMetricsCollector {
 
     // 단일 컨테이너의 상세 메트릭 수집
     private DetailedContainerMetricsResponseDTO collectSingleDetailedContainer(String containerHash, String name, String status, String state) {
+        long startTime = System.currentTimeMillis();
         try (StatsCmd statsCmd = dockerClient.statsCmd(containerHash).withNoStream(true)) {
             final CountDownLatch latch = new CountDownLatch(1);
             final DetailedContainerMetricsResponseDTO[] result = new DetailedContainerMetricsResponseDTO[1];
@@ -235,11 +246,13 @@ public class ContainerMetricsCollector {
             statsCmd.exec(new ResultCallback.Adapter<Statistics>() {
                 @Override
                 public void onNext(Statistics stats) {
+                    log.info("📊 Received stats for container: {}", name);
                     result[0] = DetailedContainerMetricsResponseDTO.builder()
                             .containerHash(containerHash)
                             .containerName(name)
                             .status(status)
                             .state(state)
+                            .collectedAt(java.time.LocalDateTime.now())  // 실제 수집 시간
                             .cpu(buildCpuMetrics(stats, containerHash))
                             .memory(buildMemoryMetrics(stats))
                             .network(buildNetworkMetrics(stats))
@@ -250,7 +263,7 @@ public class ContainerMetricsCollector {
 
                 @Override
                 public void onError(Throwable throwable) {
-                    log.error("Error while collecting detailed stats for {}", name, throwable);
+                    log.error("❌ Error while collecting detailed stats for {}: {}", name, throwable.getMessage(), throwable);
                     latch.countDown();
                 }
 
@@ -260,7 +273,18 @@ public class ContainerMetricsCollector {
                 }
             });
 
-            latch.await(2, TimeUnit.SECONDS);
+            boolean completed = latch.await(3, TimeUnit.SECONDS);
+            long elapsedTime = System.currentTimeMillis() - startTime;
+
+            if (!completed) {
+                log.warn("⏱️ Timeout waiting for stats from container: {} after {}ms", name, elapsedTime);
+            } else {
+                log.debug("✓ Stats collected for {} in {}ms", name, elapsedTime);
+            }
+
+            if (result[0] == null) {
+                log.warn("⚠️ No stats received for container: {} ({}), returning empty metrics", name, containerHash);
+            }
             return result[0] != null ? result[0] : buildEmptyDetailedMetrics(containerHash, name, status);
 
         } catch (Exception e) {
@@ -270,7 +294,7 @@ public class ContainerMetricsCollector {
     }
 
     // CPU 상세 메트릭 빌드 - 원시 데이터만 수집
-    private CpuMetricsResponseDTO buildCpuMetrics(Statistics stats, String containerId) {
+    private CpuMetricsResponseDTO buildCpuMetrics(Statistics stats, String containerHash) {
         if (stats.getCpuStats() == null) {
             return CpuMetricsResponseDTO.builder().build();
         }
@@ -293,23 +317,34 @@ public class ContainerMetricsCollector {
 
         // Throttling 정보
         ThrottlingDataConfig throttlingData = cpuStats.getThrottlingData();
-        Long throttlingPeriods = throttlingData != null ? throttlingData.getPeriods() : null;
-        Long throttledPeriods = throttlingData != null ? throttlingData.getThrottledPeriods() : null;
-        Long throttledTime = throttlingData != null ? throttlingData.getThrottledTime() : null;
+        Long throttlingPeriods = throttlingData != null ? throttlingData.getPeriods() : Long.valueOf(0L);
+        Long throttledPeriods = throttlingData != null ? throttlingData.getThrottledPeriods() : Long.valueOf(0L);
+        Long throttledTime = throttlingData != null ? throttlingData.getThrottledTime() : Long.valueOf(0L);
 
         // CPU Quota와 Period는 inspect API에서 가져옴
         Long cpuQuota = null;
         Long cpuPeriod = null;
         try {
             InspectContainerResponse inspectResponse =
-                dockerClient.inspectContainerCmd(containerId).exec();
+                dockerClient.inspectContainerCmd(containerHash).exec();
             HostConfig hostConfig = inspectResponse.getHostConfig();
             if (hostConfig != null) {
                 cpuQuota = hostConfig.getCpuQuota();
                 cpuPeriod = hostConfig.getCpuPeriod();
             }
         } catch (Exception e) {
-            log.warn("Failed to get CPU quota/period for container {}: {}", containerId, e.getMessage());
+            log.warn("Failed to get CPU quota/period for container {}: {}", containerHash, e.getMessage());
+        }
+
+        // Docker 기본값 설정
+        // cpuPeriod: 기본값 100,000 µs (100ms)
+        if (cpuPeriod == null || cpuPeriod == 0) {
+            cpuPeriod = 100000L;
+        }
+
+        // cpuQuota: 0 또는 -1이면 무제한 (limit 없음)
+        if (cpuQuota == null || cpuQuota <= 0) {
+            cpuQuota = 0L;  // 0 = 무제한
         }
 
         return CpuMetricsResponseDTO.builder()
@@ -332,12 +367,26 @@ public class ContainerMetricsCollector {
             return MemoryMetricsResponseDTO.builder().build();
         }
 
-        var memStats = stats.getMemoryStats();
+        MemoryStatsConfig memStats = stats.getMemoryStats();
 
         // 원시 데이터 추출 (계산 없음)
         Long memUsage = memStats.getUsage();
         Long memLimit = memStats.getLimit();
         Long memMaxUsage = memStats.getMaxUsage();
+
+        // cgroup v2 환경에서는 max_usage가 null이므로, 한 번만 경고 후 0으로 설정
+        if (memMaxUsage == null) {
+            if (isCgroupV2 == null) {
+                log.warn("⚠️ memory.max_usage is null - Cgroup v2 environment detected.");
+                log.warn("   → Backend will handle peak memory tracking instead.");
+                isCgroupV2 = true;
+            }
+            memMaxUsage = 0L;  // Backend에서 처리하도록 0으로 설정
+        } else if (isCgroupV2 == null) {
+            isCgroupV2 = false;
+        }
+
+        log.debug("Memory stats - usage: {}, limit: {}, max_usage: {}", memUsage, memLimit, memMaxUsage);
 
         return MemoryMetricsResponseDTO.builder()
                 .memUsage(memUsage)
@@ -363,7 +412,7 @@ public class ContainerMetricsCollector {
 
         // 모든 네트워크 인터페이스의 원시 데이터를 합산
         for (Entry<String, StatisticNetworksConfig> entry : stats.getNetworks().entrySet()) {
-            var net = entry.getValue();
+            StatisticNetworksConfig net = entry.getValue();
             if (net.getRxBytes() != null) rxBytes += net.getRxBytes();
             if (net.getTxBytes() != null) txBytes += net.getTxBytes();
             if (net.getRxPackets() != null) rxPackets += net.getRxPackets();
@@ -396,7 +445,7 @@ public class ContainerMetricsCollector {
         long blkWrite = 0L;
 
         // Read/Write 원시 데이터 추출
-        for (var entry : stats.getBlkioStats().getIoServiceBytesRecursive()) {
+        for (BlkioStatEntry entry : stats.getBlkioStats().getIoServiceBytesRecursive()) {
             if (entry.getOp() != null && entry.getValue() != null) {
                 if (entry.getOp().equalsIgnoreCase("Read")) {
                     blkRead += entry.getValue();
@@ -418,6 +467,7 @@ public class ContainerMetricsCollector {
                 .containerHash(containerHash)
                 .containerName(name)
                 .status(status)
+                .collectedAt(java.time.LocalDateTime.now())  // 에러 발생 시에도 수집 시간 기록
                 .cpu(CpuMetricsResponseDTO.builder().build())
                 .memory(MemoryMetricsResponseDTO.builder().build())
                 .network(NetworkMetricsResponseDTO.builder().build())
