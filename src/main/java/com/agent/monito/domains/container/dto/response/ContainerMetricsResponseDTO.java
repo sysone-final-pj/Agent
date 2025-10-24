@@ -8,8 +8,7 @@ import lombok.*;
 
 @Getter
 @Builder
-@AllArgsConstructor
-@NoArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class ContainerMetricsResponseDTO {
     private String containerName;
     private double cpuUsage;

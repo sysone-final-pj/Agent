@@ -7,8 +7,7 @@ import lombok.*;
 
 @Getter
 @Builder
-@AllArgsConstructor
-@NoArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class CpuMetricsResponseDTO {
     private Long cpuUsageTotal;             // 총 CPU 사용량 (nanoseconds)
     private Long cpuUser;                   // User mode CPU 사용량 (nanoseconds)

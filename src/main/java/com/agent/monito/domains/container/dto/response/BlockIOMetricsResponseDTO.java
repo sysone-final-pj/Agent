@@ -7,8 +7,7 @@ import lombok.*;
 
 @Getter
 @Builder
-@AllArgsConstructor
-@NoArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class BlockIOMetricsResponseDTO {
     private Long blkRead;
     private Long blkWrite;
