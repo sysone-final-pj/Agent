@@ -6,6 +6,7 @@ package com.agent.monito.domains.container.service;
 
 import com.agent.monito.domains.container.dto.response.ContainerMetricsResponseDTO;
 import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
+import com.agent.monito.domains.container.dto.response.MetricsWithHostInfoResponseDTO;
 
 import java.util.List;
 
@@ -13,4 +14,5 @@ public interface ContainerService {
 
     List<ContainerMetricsResponseDTO> collectAllContainerMetrics();
     List<DetailedContainerMetricsResponseDTO> collectAllDetailedContainerMetrics();
+    MetricsWithHostInfoResponseDTO collectMetricsWithHostInfo();
 }

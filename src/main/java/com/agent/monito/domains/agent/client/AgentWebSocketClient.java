@@ -1,5 +1,7 @@
 package com.agent.monito.domains.agent.client;
 
+import com.agent.monito.domains.agent.collector.HostMemoryCollector;
+import com.agent.monito.domains.agent.dto.response.AgentInfoResponseDTO;
 import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
 import com.agent.monito.domains.container.service.ContainerService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,6 +30,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 public class AgentWebSocketClient extends TextWebSocketHandler {
 
     private final ContainerService containerService;
+    private final HostMemoryCollector hostMemoryCollector;
     private final ObjectMapper objectMapper;
 
     @Value("${agent.key}")
@@ -124,6 +127,10 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
                 log.debug("메트릭 ACK 수신");
                 break;
 
+            case "AGENT_INFO_ACK":
+                log.debug("Agent 메타데이터 수신");
+                break;
+
             case "PONG":
                 log.debug("PONG 수신");
                 break;
@@ -144,8 +151,11 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
         log.info("인증 성공!");
         log.info("   Agent Key: {}", data.get("agentKey"));
         log.info("   메시지: {}", data.get("message"));
-        log.info("   메트릭 전송 시작...");
+        log.info("   Agent 정보 전송 시작...");
         log.info("═══════════════════════════════════════");
+
+        // 인증 성공 직후 Agent 정보 전송
+        sendAgentInfo();
     }
 
     private void handleAuthFailed(Map<String, Object> data) {
@@ -154,6 +164,43 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
         log.error("   이유: {}", data.get("message"));
         log.error("   연결이 곧 종료됩니다.");
         log.error("═══════════════════════════════════════");
+    }
+
+    /**
+     * 인증 성공 시 1회 및 1시간마다 Agent 정보(호스트 스펙)를 Backend로 전송
+     * BE의 InMemory 캐시 갱신용
+     */
+    @Scheduled(fixedRate = 3600000) // 1시간 = 3600000ms
+    public void sendAgentInfo() {
+        if (session == null || !session.isOpen() || !authenticated) {
+            log.debug("Agent 정보 전송 생략 (연결 또는 인증 상태 아님)");
+            return;
+        }
+
+        try {
+            AgentInfoResponseDTO agentInfo = hostMemoryCollector.collectAgentInfo();
+
+            // BE가 기대하는 nested 구조로 전송
+            Map<String, Object> message = Map.of(
+                    "type", "AGENT_INFO",
+                    "data", Map.of(
+                            "agentKey", agentKey,
+                            "host", Map.of(
+                                    "totalMemory", agentInfo.getHostTotalMemory(),
+                                    "cpuCores", agentInfo.getHostCpuCores()
+                            )
+                    )
+            );
+
+            String json = objectMapper.writeValueAsString(message);
+            session.sendMessage(new TextMessage(json));
+
+            log.info("✓ Agent 정보 전송 완료 (Total Memory: {} bytes, CPU Cores: {})",
+                    agentInfo.getHostTotalMemory(), agentInfo.getHostCpuCores());
+
+        } catch (Exception e) {
+            log.error("Agent 정보 전송 실패: {}", e.getMessage(), e);
+        }
     }
 
     /**
@@ -179,7 +226,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
         try {
             log.debug("컨테이너 메트릭 수집 시작...");
 
-            // 실제 컨테이너 메트릭 수집
+            // 실제 컨테이너 메트릭 수집 (호스트 정보 제외)
             List<DetailedContainerMetricsResponseDTO> metrics =
                 containerService.collectAllDetailedContainerMetrics();
 
@@ -190,7 +237,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
 
             log.info("{}개의 컨테이너 메트릭 수집 완료. Backend로 전송 중...", metrics.size());
 
-            // WebSocket으로 메트릭 전송 (BE handleMetrics 형식에 맞춤)
+            // WebSocket으로 메트릭 전송 (metrics)
             Map<String, Object> message = Map.of(
                     "type", "METRICS",
                     "data", Map.of(
