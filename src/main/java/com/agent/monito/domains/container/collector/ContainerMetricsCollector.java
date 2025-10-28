@@ -8,6 +8,7 @@ import com.agent.monito.domains.container.dto.response.*;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.command.InspectImageResponse;
 import com.github.dockerjava.api.command.StatsCmd;
 import com.github.dockerjava.api.model.BlkioStatEntry;
 import com.github.dockerjava.api.model.Container;
@@ -79,7 +80,9 @@ public class ContainerMetricsCollector {
     public List<DetailedContainerMetricsResponseDTO> collectAllDetailedContainers() {
         long startTime = System.currentTimeMillis();
         try {
-            List<Container> containers = dockerClient.listContainersCmd().exec();
+            List<Container> containers = dockerClient.listContainersCmd()
+                    .withShowSize(true)  // Container size 정보 포함
+                    .exec();
             log.info("Found {} running containers", containers.size());
 
             // 모든 컨테이너를 병렬로 수집
@@ -89,8 +92,10 @@ public class ContainerMetricsCollector {
                         String containerName = container.getNames()[0].replace("/", "");
                         String status = container.getStatus();
                         String state = container.getState();
+                        Long sizeRw = container.getSizeRw();
+                        Long sizeRootFs = container.getSizeRootFs();
                         log.info("Collecting detailed stats for container: {}", containerName);
-                        return collectSingleDetailedContainer(containerHash, containerName, status, state);
+                        return collectSingleDetailedContainer(containerHash, containerName, status, state, sizeRw, sizeRootFs);
                     }))
                     .collect(Collectors.toList());
 
@@ -237,7 +242,7 @@ public class ContainerMetricsCollector {
     }
 
     // 단일 컨테이너의 상세 메트릭 수집
-    private DetailedContainerMetricsResponseDTO collectSingleDetailedContainer(String containerHash, String name, String status, String state) {
+    private DetailedContainerMetricsResponseDTO collectSingleDetailedContainer(String containerHash, String name, String status, String state, Long sizeRw, Long sizeRootFs) {
         long startTime = System.currentTimeMillis();
         try (StatsCmd statsCmd = dockerClient.statsCmd(containerHash).withNoStream(true)) {
             final CountDownLatch latch = new CountDownLatch(1);
@@ -257,6 +262,7 @@ public class ContainerMetricsCollector {
                             .memory(buildMemoryMetrics(stats))
                             .network(buildNetworkMetrics(stats))
                             .blockIO(buildBlockIOMetrics(stats))
+                            .storage(buildStorageMetrics(containerHash, sizeRw, sizeRootFs))
                             .build();
                     latch.countDown();
                 }
@@ -285,11 +291,11 @@ public class ContainerMetricsCollector {
             if (result[0] == null) {
                 log.warn("⚠️ No stats received for container: {} ({}), returning empty metrics", name, containerHash);
             }
-            return result[0] != null ? result[0] : buildEmptyDetailedMetrics(containerHash, name, status);
+            return result[0] != null ? result[0] : buildEmptyDetailedMetrics(containerHash, name, status, sizeRw, sizeRootFs);
 
         } catch (Exception e) {
             log.error("Failed to collect detailed stats for {}", name, e);
-            return buildEmptyDetailedMetrics(containerHash, name, status);
+            return buildEmptyDetailedMetrics(containerHash, name, status, sizeRw, sizeRootFs);
         }
     }
 
@@ -461,8 +467,49 @@ public class ContainerMetricsCollector {
                 .build();
     }
 
+    // Storage 상세 메트릭 빌드 - Container Size & Image Size
+    private StorageMetricsResponseDTO buildStorageMetrics(String containerHash, Long sizeRw, Long sizeRootFs) {
+        try {
+            // 1. Container Size 정보는 파라미터로 받음 (withShowSize(true)로 이미 조회됨)
+
+            // 2. Image Size 정보만 inspect API로 수집
+            InspectContainerResponse containerInfo = dockerClient.inspectContainerCmd(containerHash).exec();
+            String imageId = containerInfo.getImageId();
+            String imageName = containerInfo.getConfig().getImage();
+            Long imageSize = 0L;
+
+            if (imageId != null) {
+                try {
+                    InspectImageResponse imageInfo = dockerClient.inspectImageCmd(imageId).exec();
+                    imageSize = imageInfo.getSize();
+                } catch (Exception e) {
+                    log.warn("Failed to get image size for container {}: {}", containerHash, e.getMessage());
+                }
+            }
+
+            log.debug("Storage metrics - sizeRw: {}, sizeRootFs: {}, imageSize: {}, imageName: {}",
+                    sizeRw, sizeRootFs, imageSize, imageName);
+
+            return StorageMetricsResponseDTO.builder()
+                    .sizeRw(sizeRw != null ? sizeRw : 0L)
+                    .sizeRootFs(sizeRootFs != null ? sizeRootFs : 0L)
+                    .imageSize(imageSize)
+                    .imageName(imageName)
+                    .build();
+
+        } catch (Exception e) {
+            log.error("Failed to collect storage metrics for container {}: {}", containerHash, e.getMessage());
+            return StorageMetricsResponseDTO.builder()
+                    .sizeRw(sizeRw != null ? sizeRw : 0L)
+                    .sizeRootFs(sizeRootFs != null ? sizeRootFs : 0L)
+                    .imageSize(0L)
+                    .imageName("unknown")
+                    .build();
+        }
+    }
+
     // 빈 상세 메트릭 객체 생성 (에러 발생 시)
-    private DetailedContainerMetricsResponseDTO buildEmptyDetailedMetrics(String containerHash, String name, String status) {
+    private DetailedContainerMetricsResponseDTO buildEmptyDetailedMetrics(String containerHash, String name, String status, Long sizeRw, Long sizeRootFs) {
         return DetailedContainerMetricsResponseDTO.builder()
                 .containerHash(containerHash)
                 .containerName(name)
@@ -472,6 +519,12 @@ public class ContainerMetricsCollector {
                 .memory(MemoryMetricsResponseDTO.builder().build())
                 .network(NetworkMetricsResponseDTO.builder().build())
                 .blockIO(BlockIOMetricsResponseDTO.builder().build())
+                .storage(StorageMetricsResponseDTO.builder()
+                        .sizeRw(sizeRw != null ? sizeRw : 0L)
+                        .sizeRootFs(sizeRootFs != null ? sizeRootFs : 0L)
+                        .imageSize(0L)
+                        .imageName("unknown")
+                        .build())
                 .build();
     }
 }

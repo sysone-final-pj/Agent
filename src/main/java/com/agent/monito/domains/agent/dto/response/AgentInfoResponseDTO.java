@@ -13,4 +13,5 @@ public class AgentInfoResponseDTO {
     private String agentKey;
     private Long hostTotalMemory;   // 호스트의 전체 물리 메모리 (bytes)
     private Integer hostCpuCores;   // 호스트의 CPU 코어 수
+    private Long hostTotalDisk;     // 호스트의 전체 디스크 용량 (bytes)
 }

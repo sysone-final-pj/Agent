@@ -187,7 +187,8 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
                             "agentKey", agentKey,
                             "host", Map.of(
                                     "totalMemory", agentInfo.getHostTotalMemory(),
-                                    "cpuCores", agentInfo.getHostCpuCores()
+                                    "cpuCores", agentInfo.getHostCpuCores(),
+                                    "totalDisk", agentInfo.getHostTotalDisk()
                             )
                     )
             );
@@ -195,8 +196,8 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
             String json = objectMapper.writeValueAsString(message);
             session.sendMessage(new TextMessage(json));
 
-            log.info("✓ Agent 정보 전송 완료 (Total Memory: {} bytes, CPU Cores: {})",
-                    agentInfo.getHostTotalMemory(), agentInfo.getHostCpuCores());
+            log.info("✓ Agent 정보 전송 완료 (Total Memory: {} bytes, CPU Cores: {} Total Disk: {})",
+                    agentInfo.getHostTotalMemory(), agentInfo.getHostCpuCores(), agentInfo.getHostTotalDisk());
 
         } catch (Exception e) {
             log.error("Agent 정보 전송 실패: {}", e.getMessage(), e);

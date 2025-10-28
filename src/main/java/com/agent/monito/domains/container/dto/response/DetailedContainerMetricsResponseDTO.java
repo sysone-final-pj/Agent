@@ -32,4 +32,7 @@ public class DetailedContainerMetricsResponseDTO {
 
     // Block I/O 관련 메트릭
     private BlockIOMetricsResponseDTO blockIO;
+
+    // Storage 관련 메트릭
+    private StorageMetricsResponseDTO storage;
 }
