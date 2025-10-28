@@ -5,11 +5,11 @@
 package com.agent.monito.domains.container.dto.response;
 
 import lombok.*;
+import java.time.LocalDateTime;
 
 @Getter
 @Builder
-@AllArgsConstructor
-@NoArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class DetailedContainerMetricsResponseDTO {
 
     // 기본 정보
@@ -17,6 +17,9 @@ public class DetailedContainerMetricsResponseDTO {
     private String containerName;
     private String status;
     private String state;
+
+    // 메트릭 수집 시간 (Agent에서 실제로 수집한 시간)
+    private LocalDateTime collectedAt;
 
     // CPU 관련 메트릭
     private CpuMetricsResponseDTO cpu;
@@ -29,4 +32,7 @@ public class DetailedContainerMetricsResponseDTO {
 
     // Block I/O 관련 메트릭
     private BlockIOMetricsResponseDTO blockIO;
+
+    // Storage 관련 메트릭
+    private StorageMetricsResponseDTO storage;
 }

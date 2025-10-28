@@ -7,8 +7,7 @@ import lombok.*;
 
 @Getter
 @Builder
-@AllArgsConstructor
-@NoArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class NetworkMetricsResponseDTO {
     private Long rxBytes;                   // 수신 바이트 (누적값)
     private Long txBytes;                   // 송신 바이트 (누적값)
