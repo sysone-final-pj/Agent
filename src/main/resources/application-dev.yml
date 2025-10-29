@@ -30,6 +30,9 @@ scheduler:
   metrics-push:
     fixed-delay: 5000      # 5초마다 실행 (밀리초)
     initial-delay: 10000   # 애플리케이션 시작 후 10초 뒤 첫 실행
+  logs-push:
+    fixed-delay: 10000     # 10초마다 실행 (밀리초)
+    initial-delay: 15000   # 애플리케이션 시작 후 15초 뒤 첫 실행
   thread-pool:
     core-size: 2           # 기본 스레드 수
     max-size: 5            # 최대 스레드 수
