@@ -2,6 +2,8 @@ package com.agent.monito.domains.agent.client;
 
 import com.agent.monito.domains.agent.collector.HostMemoryCollector;
 import com.agent.monito.domains.agent.dto.response.AgentInfoResponseDTO;
+import com.agent.monito.domains.container.cache.ContainerLogTimestampCache;
+import com.agent.monito.domains.container.dto.response.ContainerLogEntryResponseDTO;
 import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
 import com.agent.monito.domains.container.service.ContainerService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,6 +33,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
 
     private final ContainerService containerService;
     private final HostMemoryCollector hostMemoryCollector;
+    private final ContainerLogTimestampCache logTimestampCache;
     private final ObjectMapper objectMapper;
 
     @Value("${agent.key}")
@@ -125,6 +128,10 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
 
             case "ACK":
                 log.debug("메트릭 ACK 수신");
+                break;
+
+            case "LOGS_ACK":
+                log.debug("container 로그 수신");
                 break;
 
             case "AGENT_INFO_ACK":
@@ -238,7 +245,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
 
             log.info("{}개의 컨테이너 메트릭 수집 완료. Backend로 전송 중...", metrics.size());
 
-            // WebSocket으로 메트릭 전송 (metrics)
+            // WebSocket으로 메트릭 전송
             Map<String, Object> message = Map.of(
                     "type", "METRICS",
                     "data", Map.of(
@@ -249,13 +256,102 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
             );
 
             String json = objectMapper.writeValueAsString(message);
-            log.debug("전송할 JSON: {}", json);  // 디버그용 로그 추가
+            log.debug("전송할 JSON (메트릭): {}", json);
             session.sendMessage(new TextMessage(json));
 
             log.info("✓ {}개의 컨테이너 메트릭 전송 완료", metrics.size());
 
         } catch (Exception e) {
             log.error("메트릭 수집/전송 실패: {}", e.getMessage(), e);
+            // 연결 문제일 수 있으므로 인증 상태 초기화
+            if (e.getMessage() != null && e.getMessage().contains("connection")) {
+                authenticated = false;
+            }
+        }
+    }
+
+    /**
+     * 주기적으로 컨테이너 로그를 수집하여 WebSocket으로 전송
+     * application.yml의 scheduler.logs-push 설정값을 따름
+     * since 파라미터를 사용하여 이미 수집한 로그는 제외 (중복 방지)
+     */
+    @Scheduled(
+        fixedDelayString = "${scheduler.logs-push.fixed-delay}",
+        initialDelayString = "${scheduler.logs-push.initial-delay}"
+    )
+    public void sendLogs() {
+        if (session == null || !session.isOpen()) {
+            log.warn("연결되지 않음. 로그 전송 불가.");
+            return;
+        }
+
+        if (!authenticated) {
+            log.warn("인증되지 않음. 로그 전송 불가.");
+            return;
+        }
+
+        try {
+            log.debug("컨테이너 로그 수집 시작...");
+
+            // 캐시에서 각 컨테이너의 마지막 로그 수집 시점 가져오기
+            Map<String, Integer> containerSinceMap = logTimestampCache.getAllTimestamps();
+
+            log.debug("Using cached timestamps for {} containers", containerSinceMap.size());
+
+            // 컨테이너 로그 수집
+            // - 캐시에 없는 컨테이너 (첫 수집): 최근 10줄만
+            // - 캐시에 있는 컨테이너: since 시점 이후의 로그만
+            Map<String, List<ContainerLogEntryResponseDTO>> logs =
+                containerService.collectAllContainerLogs(10, containerSinceMap);
+
+            if (logs.isEmpty()) {
+                log.debug("수집된 로그가 없습니다. 전송 생략.");
+                return;
+            }
+
+            // 수집된 로그의 타임스탬프를 캐시에 업데이트
+            int totalLogCount = 0;
+            for (Map.Entry<String, List<ContainerLogEntryResponseDTO>> entry : logs.entrySet()) {
+                String containerHash = entry.getKey();
+                List<ContainerLogEntryResponseDTO> logEntries = entry.getValue();
+
+                totalLogCount += logEntries.size();
+
+                // 해당 컨테이너의 가장 최신 로그 타임스탬프 찾기
+                logEntries.stream()
+                    .filter(logEntry -> logEntry.getTimestamp() != null)
+                    .forEach(logEntry ->
+                        logTimestampCache.updateTimestamp(containerHash, logEntry.getTimestamp())
+                    );
+
+                // 로그가 없거나 타임스탬프가 모두 null인 경우 현재 시각으로 업데이트
+                if (logEntries.isEmpty() ||
+                    logEntries.stream().allMatch(log -> log.getTimestamp() == null)) {
+                    logTimestampCache.updateToNow(containerHash);
+                }
+            }
+
+            log.info("{}개 컨테이너에서 총 {}개의 새 로그 수집 완료. Backend로 전송 중...",
+                    logs.size(), totalLogCount);
+
+            // WebSocket으로 로그 전송
+            Map<String, Object> message = Map.of(
+                    "type", "LOGS",
+                    "data", Map.of(
+                            "agentKey", agentKey,
+                            "logs", logs,
+                            "timestamp", System.currentTimeMillis()
+                    )
+            );
+
+            String json = objectMapper.writeValueAsString(message);
+            log.debug("전송할 JSON (로그): {}", json);
+            session.sendMessage(new TextMessage(json));
+
+            log.info("✓ {}개 컨테이너의 {}개 로그 전송 완료", logs.size(), totalLogCount);
+
+        } catch (Exception e) {
+            log.error("로그 수집/전송 실패: {}", e.getMessage(), e);
             // 연결 문제일 수 있으므로 인증 상태 초기화
             if (e.getMessage() != null && e.getMessage().contains("connection")) {
                 authenticated = false;

@@ -18,6 +18,19 @@ jwt:
 server:
   port: ${SERVER_PORT:8080}
 
+# 스케줄링 설정 (운영환경)
+scheduler:
+  metrics-push:
+    fixed-delay: 10000     # 10초마다 실행 (밀리초)
+    initial-delay: 15000   # 애플리케이션 시작 후 15초 뒤 첫 실행
+  logs-push:
+    fixed-delay: 30000     # 30초마다 실행 (밀리초)
+    initial-delay: 20000   # 애플리케이션 시작 후 20초 뒤 첫 실행
+  thread-pool:
+    core-size: 3           # 기본 스레드 수
+    max-size: 10           # 최대 스레드 수
+    queue-capacity: 20     # 큐 용량
+
 # 로그 레벨 (운영환경에서는 INFO/WARN 레벨 사용)
 logging:
   level:
