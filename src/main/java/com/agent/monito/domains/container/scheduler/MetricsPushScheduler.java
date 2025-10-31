@@ -1,81 +1,71 @@
 /**
- * [DEPRECATED] REST API 방식의 메트릭 전송 스케줄러
- *
- * 현재는 WebSocket 방식으로 전환되어 사용하지 않음.
- * AgentWebSocketClient가 동일한 기능을 WebSocket으로 수행함.
- *
- * 이 파일은 향후 제거 예정.
+ * 컨테이너 메트릭 수집 및 전송 스케줄러
+ * 주기적으로 메트릭을 수집하여 WebSocket을 통해 Backend로 전송
  */
 package com.agent.monito.domains.container.scheduler;
 
+import com.agent.monito.domains.agent.client.AgentWebSocketClient;
 import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
 import com.agent.monito.domains.container.service.ContainerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.util.List;
 
-// @Component  // ← 비활성화: WebSocket 방식으로 전환됨
 @Slf4j
+@Component
 @RequiredArgsConstructor
 public class MetricsPushScheduler {
 
     private final ContainerService containerService;
-    private final WebClient webClient;
-
-    @Value("${backend.api.metrics}")
-    private String metricsApiPath;
+    private final AgentWebSocketClient webSocketClient;
 
     /**
-     * 주기적으로 컨테이너 메트릭을 수집하여 Backend로 전송
-     * fixedDelayString: 이전 작업 완료 후 대기 시간 (application.yml에서 설정)
-     * initialDelayString: 애플리케이션 시작 후 첫 실행까지 대기 시간 (application.yml에서 설정)
+     * 주기적으로 컨테이너 메트릭을 수집하여 WebSocket으로 전송
+     * application.yml의 scheduler.metrics-push 설정값을 따름
      */
     @Scheduled(
         fixedDelayString = "${scheduler.metrics-push.fixed-delay}",
         initialDelayString = "${scheduler.metrics-push.initial-delay}"
     )
-    public void pushMetricsToBackend() {
-        try {
-            log.debug("Starting metrics collection for Backend push...");
+    public void pushMetrics() {
+        // 연결 및 인증 상태 확인
+        if (!webSocketClient.isReady()) {
+            log.warn("WebSocket 연결 또는 인증 상태 아님. 메트릭 전송 생략.");
+            return;
+        }
 
-            // 상세 메트릭 수집 (비동기 병렬 처리)
+        try {
+            log.debug("컨테이너 메트릭 수집 시작...");
+
+            // 컨테이너 메트릭 수집
             List<DetailedContainerMetricsResponseDTO> metrics =
                 containerService.collectAllDetailedContainerMetrics();
 
             if (metrics.isEmpty()) {
-                log.debug("No running containers found. Skipping push.");
+                log.debug("실행 중인 컨테이너가 없습니다. 전송 생략.");
                 return;
             }
 
-            log.info("Collected {} container metrics. Pushing to Backend...", metrics.size());
+            log.info("{}개의 컨테이너 메트릭 수집 완료. Backend로 전송 중...", metrics.size());
 
-            // Backend로 비동기 전송
-            webClient.post()
-                    .uri(metricsApiPath)
-                    .bodyValue(metrics)
-                    .retrieve()
-                    .toBodilessEntity()
-                    .doOnSuccess(response ->
-                        log.info("✓ Successfully pushed {} metrics to Backend", metrics.size())
-                    )
-                    .doOnError(error ->
-                        log.error("✗ Failed to push metrics to Backend: {}", error.getMessage())
-                    )
-                    .onErrorResume(error -> {
-                        // 에러 발생 시에도 스케줄러는 계속 동작
-                        log.warn("Backend communication error. Will retry in next schedule.");
-                        return Mono.empty();
-                    })
-                    .subscribe(); // 비동기 실행
+            // 수집 후 다시 연결 상태 확인 (race condition 방지)
+            if (!webSocketClient.isReady()) {
+                log.warn("메트릭 수집 중 연결이 끊어졌습니다. 다음 주기에 재시도합니다.");
+                return;
+            }
 
+            // WebSocket으로 전송
+            webSocketClient.sendMetricsMessage(metrics);
+
+            log.info("✓ {}개의 컨테이너 메트릭 전송 완료", metrics.size());
+
+        } catch (IllegalStateException e) {
+            log.error("WebSocket 세션이 닫혔습니다: {}", e.getMessage());
         } catch (Exception e) {
-            log.error("Error during metrics collection: {}", e.getMessage(), e);
+            log.error("메트릭 수집/전송 실패: {}", e.getMessage(), e);
         }
     }
 }
