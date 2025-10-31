@@ -54,7 +54,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
     private void connect() {
         try {
             StandardWebSocketClient client = new StandardWebSocketClient();
-            String wsUrl = backendUrl + "/ws/agent";
+            String wsUrl = backendUrl + "/agent";
 
             log.info("Backend 연결 시도...");
             log.info("   URL: {}", wsUrl);
