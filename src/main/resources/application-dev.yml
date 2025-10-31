@@ -33,6 +33,8 @@ scheduler:
   logs-push:
     fixed-delay: 10000     # 10초마다 실행 (밀리초)
     initial-delay: 15000   # 애플리케이션 시작 후 15초 뒤 첫 실행
+  agent-info-push:
+    fixed-delay: 3600000     # 1시간마다 실행 (3600000ms)
   thread-pool:
     core-size: 2           # 기본 스레드 수
     max-size: 5            # 최대 스레드 수
