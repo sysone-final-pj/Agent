@@ -14,6 +14,7 @@ public class DetailedContainerStatsCollectedDTO {
     private String containerName;
     private String status;
     private String state;
+    private String health;
     private Long sizeRw;
     private Long sizeRootFs;
     private Statistics statistics;

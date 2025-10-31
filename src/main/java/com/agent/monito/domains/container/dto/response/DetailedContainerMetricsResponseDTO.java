@@ -17,6 +17,7 @@ public class DetailedContainerMetricsResponseDTO {
     private String containerName;
     private String status;
     private String state;
+    private String health;
 
     // 메트릭 수집 시간 (Agent에서 실제로 수집한 시간)
     private LocalDateTime collectedAt;

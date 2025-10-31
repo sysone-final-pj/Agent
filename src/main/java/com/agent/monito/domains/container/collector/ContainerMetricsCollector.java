@@ -8,6 +8,7 @@ import com.agent.monito.domains.container.dto.collected.ContainerStatsCollectedD
 import com.agent.monito.domains.container.dto.collected.DetailedContainerStatsCollectedDTO;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
+import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.command.StatsCmd;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.Statistics;
@@ -83,12 +84,13 @@ public class ContainerMetricsCollector {
                     .map(container -> CompletableFuture.supplyAsync(() -> {
                         String containerHash = container.getId();
                         String containerName = container.getNames()[0].replace("/", "");
-                        String status = container.getStatus();
+                        String status = cleanStatus(container.getStatus());
                         String state = container.getState();
+                        String health = getHealthStatus(containerHash);
                         Long sizeRw = container.getSizeRw();
                         Long sizeRootFs = container.getSizeRootFs();
                         log.info("Collecting detailed stats for container: {}", containerName);
-                        return collectSingleDetailedContainer(containerHash, containerName, status, state, sizeRw, sizeRootFs);
+                        return collectSingleDetailedContainer(containerHash, containerName, status, state, health, sizeRw, sizeRootFs);
                     }))
                     .collect(Collectors.toList());
 
@@ -162,6 +164,7 @@ public class ContainerMetricsCollector {
             String containerName,
             String status,
             String state,
+            String health,
             Long sizeRw,
             Long sizeRootFs) {
 
@@ -179,6 +182,7 @@ public class ContainerMetricsCollector {
                             .containerName(containerName)
                             .status(status)
                             .state(state)
+                            .health(health)
                             .sizeRw(sizeRw)
                             .sizeRootFs(sizeRootFs)
                             .statistics(stats)
@@ -216,5 +220,41 @@ public class ContainerMetricsCollector {
             log.error("Failed to collect detailed stats for {}", containerName, e);
             return null;
         }
+    }
+
+    /**
+     * 컨테이너의 health status 조회
+     *
+     * @param containerHash 컨테이너 ID
+     * @return health status (healthy, unhealthy, starting, none, unknown)
+     */
+    private String getHealthStatus(String containerHash) {
+        try {
+            InspectContainerResponse inspectResponse = dockerClient.inspectContainerCmd(containerHash).exec();
+            InspectContainerResponse.ContainerState state = inspectResponse.getState();
+
+            if (state != null && state.getHealth() != null) {
+                String healthStatus = state.getHealth().getStatus();
+                return healthStatus != null ? healthStatus : "none";
+            }
+            return "none";
+        } catch (Exception e) {
+            log.warn("Failed to get health status for container {}: {}", containerHash, e.getMessage());
+            return "unknown";
+        }
+    }
+
+    /**
+     * status 문자열에서 괄호로 둘러싸인 health 정보 제거
+     * 예: "Up 27 seconds (healthy)" -> "Up 27 seconds"
+     *
+     * @param status 원본 status 문자열
+     * @return 정제된 status 문자열
+     */
+    private String cleanStatus(String status) {
+        if (status == null) {
+            return null;
+        }
+        return status.replaceAll("\\s*\\([^)]*\\)\\s*$", "").trim();
     }
 }

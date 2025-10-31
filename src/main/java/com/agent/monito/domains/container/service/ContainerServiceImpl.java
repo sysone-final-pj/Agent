@@ -72,6 +72,7 @@ public class ContainerServiceImpl implements ContainerService {
                             data.getContainerName(),
                             data.getStatus(),
                             data.getState(),
+                            data.getHealth(),
                             data.getSizeRw(),
                             data.getSizeRootFs(),
                             data.getStatistics()

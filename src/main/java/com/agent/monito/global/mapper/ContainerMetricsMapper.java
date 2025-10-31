@@ -56,6 +56,7 @@ public class ContainerMetricsMapper {
      * @param containerName 컨테이너 이름
      * @param status        컨테이너 상태
      * @param state         컨테이너 state
+     * @param health        컨테이너 health status
      * @param sizeRw        컨테이너 RW 사이즈
      * @param sizeRootFs    컨테이너 RootFs 사이즈
      * @param stats         Docker Statistics
@@ -66,6 +67,7 @@ public class ContainerMetricsMapper {
             String containerName,
             String status,
             String state,
+            String health,
             Long sizeRw,
             Long sizeRootFs,
             Statistics stats) {
@@ -75,6 +77,7 @@ public class ContainerMetricsMapper {
                 .containerName(containerName)
                 .status(status)
                 .state(state)
+                .health(health)
                 .collectedAt(java.time.LocalDateTime.now())
                 .cpu(buildCpuMetrics(stats, containerHash))
                 .memory(buildMemoryMetrics(stats))
