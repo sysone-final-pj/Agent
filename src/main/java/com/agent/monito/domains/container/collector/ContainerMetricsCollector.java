@@ -6,6 +6,7 @@ package com.agent.monito.domains.container.collector;
 
 import com.agent.monito.domains.container.dto.collected.ContainerStatsCollectedDTO;
 import com.agent.monito.domains.container.dto.collected.DetailedContainerStatsCollectedDTO;
+import com.agent.monito.domains.container.state.ContainerSnapshot;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
@@ -256,5 +257,42 @@ public class ContainerMetricsCollector {
             return null;
         }
         return status.replaceAll("\\s*\\([^)]*\\)\\s*$", "").trim();
+    }
+
+    /**
+     * 모든 컨테이너의 상태 스냅샷 수집 (메트릭 없이, 상태 동기화용)
+     * 실행 중인 컨테이너 + 종료된 컨테이너 모두 포함
+     *
+     * @return 컨테이너 스냅샷 리스트
+     */
+    public List<ContainerSnapshot> collectAllContainerSnapshots() {
+        try {
+            // 모든 컨테이너 조회 (실행 중 + 종료됨)
+            List<Container> allContainers = dockerClient.listContainersCmd()
+                    .withShowAll(true)
+                    .exec();
+
+            List<ContainerSnapshot> snapshots = new ArrayList<>();
+            for (Container container : allContainers) {
+                String containerHash = container.getId();
+                String containerName = container.getNames()[0].replace("/", "");
+                String state = container.getState();
+                String imageName = container.getImage();
+
+                snapshots.add(ContainerSnapshot.builder()
+                        .containerHash(containerHash)
+                        .containerName(containerName)
+                        .state(state)
+                        .imageName(imageName)
+                        .build());
+            }
+
+            log.info("Collected {} container snapshots (running + stopped)", snapshots.size());
+            return snapshots;
+
+        } catch (Exception e) {
+            log.error("Error collecting container snapshots", e);
+            return new ArrayList<>();
+        }
     }
 }
