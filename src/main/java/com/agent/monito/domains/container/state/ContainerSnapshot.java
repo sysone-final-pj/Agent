@@ -15,4 +15,5 @@ public class ContainerSnapshot {
     private String containerName;
     private String state;
     private String imageName;  // 컨테이너 이미지 이름 (예: nginx:latest)
+    private Long imageSize;    // 이미지 크기 - bytes
 }

@@ -123,6 +123,7 @@ public class ContainerStateCache {
                         .containerName(stopped.getContainerName())
                         .state("deleted")  // docker rm으로 삭제됨
                         .imageName(stopped.getImageName())
+                        .imageSize(stopped.getImageSize())
                         .build());
                 log.info("Container deleted: {} (was {})", stopped.getContainerName(), stopped.getState());
             }

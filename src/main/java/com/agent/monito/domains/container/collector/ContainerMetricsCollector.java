@@ -278,12 +278,14 @@ public class ContainerMetricsCollector {
                 String containerName = container.getNames()[0].replace("/", "");
                 String state = container.getState();
                 String imageName = container.getImage();
+                Long imageSize = getImageSize(container.getImageId());
 
                 snapshots.add(ContainerSnapshot.builder()
                         .containerHash(containerHash)
                         .containerName(containerName)
                         .state(state)
                         .imageName(imageName)
+                        .imageSize(imageSize)
                         .build());
             }
 
@@ -293,6 +295,28 @@ public class ContainerMetricsCollector {
         } catch (Exception e) {
             log.error("Error collecting container snapshots", e);
             return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 이미지 크기 조회
+     *
+     * @param imageId 이미지 ID
+     * @return 이미지 크기 (bytes), 실패 시 0L
+     */
+    private Long getImageSize(String imageId) {
+        if (imageId == null || imageId.isEmpty()) {
+            return 0L;
+        }
+
+        try {
+            com.github.dockerjava.api.command.InspectImageResponse imageInfo =
+                    dockerClient.inspectImageCmd(imageId).exec();
+            Long size = imageInfo.getSize();
+            return size != null ? size : 0L;
+        } catch (Exception e) {
+            log.debug("Failed to get image size for imageId {}: {}", imageId, e.getMessage());
+            return 0L;
         }
     }
 }
