@@ -11,7 +11,7 @@ agent:
 # Backend 웹소켓 서버 설정
 backend:
   websocket:
-    url: ws://localhost:8081  # 백엔드 웹소켓 서버 주소
+    url: ${BE_HOST:ws://localhost:8081/ws/agent/collect}  # 백엔드 웹소켓 서버 주소
   host:
     url: tcp://localhost:8081
 
