@@ -109,6 +109,7 @@ public class ContainerMetricsMapper {
                 .storage(StorageMetricsResponseDTO.builder()
                         .sizeRw(sizeRw != null ? sizeRw : 0L)
                         .sizeRootFs(sizeRootFs != null ? sizeRootFs : 0L)
+                        .storageLimit(0L)
                         .imageSize(0L)
                         .imageName("unknown")
                         .build())
@@ -275,7 +276,9 @@ public class ContainerMetricsMapper {
             String imageId = containerInfo.getImageId();
             String imageName = containerInfo.getConfig().getImage();
             Long imageSize = 0L;
+            Long storageLimit = 0L;
 
+            // Get image size
             if (imageId != null) {
                 try {
                     InspectImageResponse imageInfo = dockerClient.inspectImageCmd(imageId).exec();
@@ -285,12 +288,24 @@ public class ContainerMetricsMapper {
                 }
             }
 
-            log.debug("Storage metrics - sizeRw: {}, sizeRootFs: {}, imageSize: {}, imageName: {}",
-                    sizeRw, sizeRootFs, imageSize, imageName);
+            // Get storage limit from HostConfig.StorageOpt
+            HostConfig hostConfig = containerInfo.getHostConfig();
+            if (hostConfig != null && hostConfig.getStorageOpt() != null) {
+                java.util.Map<String, String> storageOpt = hostConfig.getStorageOpt();
+                String sizeStr = storageOpt.get("size");
+                if (sizeStr != null && !sizeStr.isEmpty()) {
+                    storageLimit = parseStorageSize(sizeStr);
+                    log.debug("Storage limit found for container {}: {} ({})", containerHash, sizeStr, storageLimit);
+                }
+            }
+
+            log.debug("Storage metrics - sizeRw: {}, sizeRootFs: {}, imageSize: {}, storageLimit: {}, imageName: {}",
+                    sizeRw, sizeRootFs, imageSize, storageLimit, imageName);
 
             return StorageMetricsResponseDTO.builder()
                     .sizeRw(sizeRw != null ? sizeRw : 0L)
                     .sizeRootFs(sizeRootFs != null ? sizeRootFs : 0L)
+                    .storageLimit(storageLimit)
                     .imageSize(imageSize)
                     .imageName(imageName)
                     .build();
@@ -300,9 +315,70 @@ public class ContainerMetricsMapper {
             return StorageMetricsResponseDTO.builder()
                     .sizeRw(sizeRw != null ? sizeRw : 0L)
                     .sizeRootFs(sizeRootFs != null ? sizeRootFs : 0L)
+                    .storageLimit(0L)
                     .imageSize(0L)
                     .imageName("unknown")
                     .build();
+        }
+    }
+
+    /**
+     * Docker storage size 문자열을 bytes로 변환
+     * 예: "10G" -> 10737418240, "100M" -> 104857600, "1024K" -> 1048576, "1234" -> 1234
+     *
+     * @param sizeStr Docker storage size 문자열
+     * @return bytes 값, 파싱 실패 시 0L
+     */
+    private Long parseStorageSize(String sizeStr) {
+        if (sizeStr == null || sizeStr.isEmpty()) {
+            return 0L;
+        }
+
+        try {
+            sizeStr = sizeStr.trim().toUpperCase();
+
+            // 숫자만 있는 경우 (bytes)
+            if (sizeStr.matches("^\\d+$")) {
+                return Long.parseLong(sizeStr);
+            }
+
+            // 단위가 있는 경우
+            String numPart = sizeStr.replaceAll("[^0-9.]", "");
+            String unitPart = sizeStr.replaceAll("[0-9.]", "");
+
+            double num = Double.parseDouble(numPart);
+            long multiplier = 1L;
+
+            switch (unitPart) {
+                case "K":
+                case "KB":
+                    multiplier = 1024L;
+                    break;
+                case "M":
+                case "MB":
+                    multiplier = 1024L * 1024L;
+                    break;
+                case "G":
+                case "GB":
+                    multiplier = 1024L * 1024L * 1024L;
+                    break;
+                case "T":
+                case "TB":
+                    multiplier = 1024L * 1024L * 1024L * 1024L;
+                    break;
+                case "B":
+                    multiplier = 1L;
+                    break;
+                default:
+                    log.warn("Unknown storage size unit: {}, treating as bytes", unitPart);
+                    multiplier = 1L;
+            }
+
+            return (long) (num * multiplier);
+
+        } catch (Exception e) {
+            log.warn("Failed to parse storage size '{}': {}", sizeStr, e.getMessage());
+            return 0L;
         }
     }
 }

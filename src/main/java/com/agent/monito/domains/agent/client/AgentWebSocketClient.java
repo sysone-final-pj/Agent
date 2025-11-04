@@ -2,8 +2,13 @@ package com.agent.monito.domains.agent.client;
 
 import com.agent.monito.domains.agent.collector.HostMemoryCollector;
 import com.agent.monito.domains.agent.dto.response.AgentInfoResponseDTO;
+import com.agent.monito.domains.container.cache.ContainerStateCache;
+import com.agent.monito.domains.container.collector.ContainerMetricsCollector;
 import com.agent.monito.domains.container.dto.response.ContainerLogEntryResponseDTO;
 import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
+import com.agent.monito.domains.container.state.ContainerSnapshot;
+import com.agent.monito.domains.container.state.ContainerStateChange;
+import com.agent.monito.domains.container.state.StateChangeResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
@@ -29,6 +34,8 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 public class AgentWebSocketClient extends TextWebSocketHandler {
 
     private final HostMemoryCollector hostMemoryCollector;
+    private final ContainerStateCache containerStateCache;
+    private final ContainerMetricsCollector containerMetricsCollector;
     private final ObjectMapper objectMapper;
 
     @Value("${agent.key}")
@@ -54,7 +61,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
     private void connect() {
         try {
             StandardWebSocketClient client = new StandardWebSocketClient();
-            String wsUrl = backendUrl + "/agent";
+            String wsUrl = backendUrl;
 
             log.info("Backend 연결 시도...");
             log.info("   URL: {}", wsUrl);
@@ -132,6 +139,9 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
             case "AGENT_INFO_ACK":
                 log.debug("Agent 메타데이터 수신");
                 break;
+            case "CONTAINER_STATE_CHANGE_ACK":
+                log.debug("container 상태 변경 수신");
+                break;
 
             case "PONG":
                 log.debug("PONG 수신");
@@ -158,6 +168,9 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
 
         // 인증 성공 직후 Agent 정보 전송
         sendInitialAgentInfo();
+
+        // 전체 컨테이너 상태 동기화 (초기 동기화)
+        syncAllContainerStates();
     }
 
     private void handleAuthFailed(Map<String, Object> data) {
@@ -311,6 +324,129 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
 
         String json = objectMapper.writeValueAsString(message);
         sendWebSocketMessage(new TextMessage(json));
+    }
+
+    /**
+     * 컨테이너 상태 변경 메시지 전송 (Scheduler 또는 초기 동기화에서 호출)
+     */
+    public void sendContainerStateChangeMessage(List<ContainerSnapshot> containers) throws Exception {
+        if (!isConnectedAndAuthenticated()) {
+            throw new IllegalStateException("Not connected or authenticated");
+        }
+
+        if (containers == null || containers.isEmpty()) {
+            log.debug("상태 변경된 컨테이너가 없습니다.");
+            return;
+        }
+
+        Map<String, Object> message = Map.of(
+                "type", "CONTAINER_STATE_CHANGE",
+                "data", Map.of(
+                        "agentKey", agentKey,
+                        "containers", containers,
+                        "timestamp", System.currentTimeMillis()
+                )
+        );
+
+        String json = objectMapper.writeValueAsString(message);
+        log.debug("전송할 JSON (컨테이너 상태 변경): {}", json);
+
+        sendWebSocketMessage(new TextMessage(json));
+    }
+
+    /**
+     * 초기 컨테이너 상태 동기화 (인증 성공 직후 호출)
+     * 모든 컨테이너의 현재 상태를 BE에 전송하고 캐시에 저장
+     */
+    private void syncAllContainerStates() {
+        try {
+            log.info("═══════════════════════════════════════");
+            log.info("컨테이너 상태 초기 동기화 시작...");
+
+            // 모든 컨테이너 상태 수집 (실행 중 + 종료됨)
+            List<ContainerSnapshot> allContainers =
+                    containerMetricsCollector.collectAllContainerSnapshots();
+
+            if (allContainers.isEmpty()) {
+                log.info("컨테이너가 없습니다.");
+                log.info("═══════════════════════════════════════");
+                return;
+            }
+
+            // CONTAINER_STATE_CHANGE 메시지 전송
+            sendContainerStateChangeMessage(allContainers);
+
+            // 캐시에 저장 (다음 상태 변화 감지를 위해)
+            containerStateCache.updateStates(allContainers);
+
+            log.info("✓ 컨테이너 상태 동기화 완료 ({개})", allContainers.size());
+            log.info("   - 컨테이너 목록:");
+            for (ContainerSnapshot snapshot : allContainers) {
+                log.info("     • {} ({})", snapshot.getContainerName(), snapshot.getState());
+            }
+            log.info("═══════════════════════════════════════");
+
+        } catch (Exception e) {
+            log.error("컨테이너 상태 동기화 실패: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 컨테이너 상태 변화 감지 및 전송 (Scheduler에서 호출)
+     */
+    public void detectAndSendStateChanges() {
+        try {
+            if (!isConnectedAndAuthenticated()) {
+                log.debug("연결되지 않음. 상태 변화 감지 스킵.");
+                return;
+            }
+
+            // 현재 모든 컨테이너 상태 수집
+            List<ContainerSnapshot> currentContainers =
+                    containerMetricsCollector.collectAllContainerSnapshots();
+
+            // 이전 상태와 비교하여 변화 감지
+            StateChangeResult changes = containerStateCache.detectChanges(currentContainers);
+
+            // 상태 변경 메시지 전송
+            List<ContainerSnapshot> changedContainers = new java.util.ArrayList<>();
+
+            // 새로 생성된 컨테이너
+            if (!changes.getNewContainers().isEmpty()) {
+                log.info("새로 생성된 컨테이너: {}", changes.getNewContainers().size());
+                changedContainers.addAll(changes.getNewContainers());
+            }
+
+            // 종료된 컨테이너
+            if (!changes.getStoppedContainers().isEmpty()) {
+                log.info("종료된 컨테이너: {}", changes.getStoppedContainers().size());
+                changedContainers.addAll(changes.getStoppedContainers());
+            }
+
+            // 상태가 변경된 컨테이너
+            if (!changes.getStateChanges().isEmpty()) {
+                log.info("상태 변경된 컨테이너: {}", changes.getStateChanges().size());
+                for (ContainerStateChange change : changes.getStateChanges()) {
+                    changedContainers.add(ContainerSnapshot.builder()
+                            .containerHash(change.getContainerHash())
+                            .containerName(change.getContainerName())
+                            .state(change.getNewState())
+                            .build());
+                }
+            }
+
+            // 변화가 있으면 메시지 전송
+            if (!changedContainers.isEmpty()) {
+                sendContainerStateChangeMessage(changedContainers);
+                log.info("✓ 컨테이너 상태 변경 메시지 전송 완료 ({}개)", changedContainers.size());
+            }
+
+            // 캐시 업데이트
+            containerStateCache.updateStates(currentContainers);
+
+        } catch (Exception e) {
+            log.error("컨테이너 상태 변화 감지 실패: {}", e.getMessage(), e);
+        }
     }
 
     /**

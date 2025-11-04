@@ -6,6 +6,7 @@ package com.agent.monito.domains.container.collector;
 
 import com.agent.monito.domains.container.dto.collected.ContainerStatsCollectedDTO;
 import com.agent.monito.domains.container.dto.collected.DetailedContainerStatsCollectedDTO;
+import com.agent.monito.domains.container.state.ContainerSnapshot;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
@@ -245,6 +246,28 @@ public class ContainerMetricsCollector {
     }
 
     /**
+     * 컨테이너의 OOMKilled 상태 조회
+     *
+     * @param containerHash 컨테이너 ID
+     * @return OOMKilled 여부
+     */
+    private Boolean getOOMKilledStatus(String containerHash) {
+        try {
+            InspectContainerResponse inspectResponse = dockerClient.inspectContainerCmd(containerHash).exec();
+            InspectContainerResponse.ContainerState state = inspectResponse.getState();
+
+            if (state != null) {
+                Boolean oomKilled = state.getOOMKilled();
+                return oomKilled != null ? oomKilled : false;
+            }
+            return false;
+        } catch (Exception e) {
+            log.warn("Failed to get OOMKilled status for container {}: {}", containerHash, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * status 문자열에서 괄호로 둘러싸인 health 정보 제거
      * 예: "Up 27 seconds (healthy)" -> "Up 27 seconds"
      *
@@ -256,5 +279,70 @@ public class ContainerMetricsCollector {
             return null;
         }
         return status.replaceAll("\\s*\\([^)]*\\)\\s*$", "").trim();
+    }
+
+    /**
+     * 모든 컨테이너의 상태 스냅샷 수집 (메트릭 없이, 상태 동기화용)
+     * 실행 중인 컨테이너 + 종료된 컨테이너 모두 포함
+     *
+     * @return 컨테이너 스냅샷 리스트
+     */
+    public List<ContainerSnapshot> collectAllContainerSnapshots() {
+        try {
+            // 모든 컨테이너 조회 (실행 중 + 종료됨)
+            List<Container> allContainers = dockerClient.listContainersCmd()
+                    .withShowAll(true)
+                    .exec();
+
+            List<ContainerSnapshot> snapshots = new ArrayList<>();
+            for (Container container : allContainers) {
+                String containerHash = container.getId();
+                String containerName = container.getNames()[0].replace("/", "");
+                String state = container.getState();
+                String imageName = container.getImage();
+                Long imageSize = getImageSize(container.getImageId());
+
+                // OOMKilled 정보 수집
+                Boolean oomKilled = getOOMKilledStatus(containerHash);
+
+                snapshots.add(ContainerSnapshot.builder()
+                        .containerHash(containerHash)
+                        .containerName(containerName)
+                        .state(state)
+                        .imageName(imageName)
+                        .imageSize(imageSize)
+                        .oomKilled(oomKilled)
+                        .build());
+            }
+
+            log.info("Collected {} container snapshots (running + stopped)", snapshots.size());
+            return snapshots;
+
+        } catch (Exception e) {
+            log.error("Error collecting container snapshots", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 이미지 크기 조회
+     *
+     * @param imageId 이미지 ID
+     * @return 이미지 크기 (bytes), 실패 시 0L
+     */
+    private Long getImageSize(String imageId) {
+        if (imageId == null || imageId.isEmpty()) {
+            return 0L;
+        }
+
+        try {
+            com.github.dockerjava.api.command.InspectImageResponse imageInfo =
+                    dockerClient.inspectImageCmd(imageId).exec();
+            Long size = imageInfo.getSize();
+            return size != null ? size : 0L;
+        } catch (Exception e) {
+            log.debug("Failed to get image size for imageId {}: {}", imageId, e.getMessage());
+            return 0L;
+        }
     }
 }

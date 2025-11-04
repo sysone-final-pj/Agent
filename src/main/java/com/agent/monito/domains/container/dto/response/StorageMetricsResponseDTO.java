@@ -16,6 +16,9 @@ public class StorageMetricsResponseDTO {
     private Long sizeRw;        // Writable layer 크기 (컨테이너가 생성한 데이터) - bytes
     private Long sizeRootFs;    // 가상 크기 (이미지 + writable layer) - bytes
 
+    // Storage Limit
+    private Long storageLimit;  // 컨테이너 저장 공간 제한 (--storage-opt size) - bytes, 0이면 제한 없음
+
     // Image Size
     private Long imageSize;     // 이미지 크기 - bytes
     private String imageName;   // 이미지 이름 (참고용)
