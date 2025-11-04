@@ -106,9 +106,11 @@ public class ContainerStateCache {
                             .containerName(current.getContainerName())
                             .oldState(previous.getState())
                             .newState(current.getState())
+                            .oomKilled(current.getOomKilled())
                             .build());
-                    log.info("State changed: {} ({} -> {})",
-                            current.getContainerName(), previous.getState(), current.getState());
+                    log.info("State changed: {} ({} -> {}), OOMKilled: {}",
+                            current.getContainerName(), previous.getState(), current.getState(),
+                            current.getOomKilled());
                 }
             }
         }

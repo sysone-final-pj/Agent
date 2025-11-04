@@ -246,6 +246,28 @@ public class ContainerMetricsCollector {
     }
 
     /**
+     * 컨테이너의 OOMKilled 상태 조회
+     *
+     * @param containerHash 컨테이너 ID
+     * @return OOMKilled 여부
+     */
+    private Boolean getOOMKilledStatus(String containerHash) {
+        try {
+            InspectContainerResponse inspectResponse = dockerClient.inspectContainerCmd(containerHash).exec();
+            InspectContainerResponse.ContainerState state = inspectResponse.getState();
+
+            if (state != null) {
+                Boolean oomKilled = state.getOOMKilled();
+                return oomKilled != null ? oomKilled : false;
+            }
+            return false;
+        } catch (Exception e) {
+            log.warn("Failed to get OOMKilled status for container {}: {}", containerHash, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * status 문자열에서 괄호로 둘러싸인 health 정보 제거
      * 예: "Up 27 seconds (healthy)" -> "Up 27 seconds"
      *
@@ -280,12 +302,16 @@ public class ContainerMetricsCollector {
                 String imageName = container.getImage();
                 Long imageSize = getImageSize(container.getImageId());
 
+                // OOMKilled 정보 수집
+                Boolean oomKilled = getOOMKilledStatus(containerHash);
+
                 snapshots.add(ContainerSnapshot.builder()
                         .containerHash(containerHash)
                         .containerName(containerName)
                         .state(state)
                         .imageName(imageName)
                         .imageSize(imageSize)
+                        .oomKilled(oomKilled)
                         .build());
             }
 

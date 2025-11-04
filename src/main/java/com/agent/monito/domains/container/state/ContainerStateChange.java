@@ -15,4 +15,5 @@ public class ContainerStateChange {
     private String containerName;
     private String oldState;
     private String newState;
+    private Boolean oomKilled;      // OOM으로 종료되었는지 여부
 }
