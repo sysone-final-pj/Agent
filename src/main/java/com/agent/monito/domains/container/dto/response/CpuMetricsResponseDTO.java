@@ -16,6 +16,7 @@ public class CpuMetricsResponseDTO {
     private Long onlineCpus;                // 온라인 CPU 개수
     private Long cpuQuota;                  // CPU quota (cgroup) - from inspect API
     private Long cpuPeriod;                 // CPU period (cgroup) - from inspect API
+    private Boolean isCpuUnlimited;         // CPU 제한 없음 여부 (true: 무제한, false: 제한 있음)
     private Long throttlingPeriods;         // Throttling이 활성화된 기간 수
     private Long throttledPeriods;          // Throttled된 기간 수
     private Long throttledTime;             // Throttled된 총 시간 (nanoseconds)

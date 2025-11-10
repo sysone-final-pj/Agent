@@ -4,6 +4,7 @@
  */
 package com.agent.monito.global.mapper;
 
+import com.agent.monito.domains.agent.cache.DockerHostInfoCache;
 import com.agent.monito.domains.container.dto.response.*;
 import com.agent.monito.global.util.MetricsCalculator;
 import com.github.dockerjava.api.DockerClient;
@@ -23,6 +24,7 @@ public class ContainerMetricsMapper {
 
     private final MetricsCalculator metricsCalculator;
     private final DockerClient dockerClient;
+    private final DockerHostInfoCache dockerHostInfoCache;
 
     // Cgroup v2 환경 여부 (한 번만 체크)
     private Boolean isCgroupV2 = null;
@@ -80,7 +82,7 @@ public class ContainerMetricsMapper {
                 .health(health)
                 .collectedAt(java.time.LocalDateTime.now())
                 .cpu(buildCpuMetrics(stats, containerHash))
-                .memory(buildMemoryMetrics(stats))
+                .memory(buildMemoryMetrics(stats, containerHash))
                 .network(buildNetworkMetrics(stats))
                 .blockIO(buildBlockIOMetrics(stats))
                 .storage(buildStorageMetrics(containerHash, sizeRw, sizeRootFs))
@@ -110,6 +112,7 @@ public class ContainerMetricsMapper {
                         .sizeRw(sizeRw != null ? sizeRw : 0L)
                         .sizeRootFs(sizeRootFs != null ? sizeRootFs : 0L)
                         .storageLimit(0L)
+                        .isStorageUnlimited(true)  // 에러 발생 시 무제한으로 간주
                         .imageSize(0L)
                         .imageName("unknown")
                         .build())
@@ -151,6 +154,19 @@ public class ContainerMetricsMapper {
             if (hostConfig != null) {
                 cpuQuota = hostConfig.getCpuQuota();
                 cpuPeriod = hostConfig.getCpuPeriod();
+
+                // --cpus 옵션으로 설정된 경우 NanoCPUs 확인
+                if ((cpuQuota == null || cpuQuota <= 0) && hostConfig.getNanoCPUs() != null) {
+                    Long nanoCpus = hostConfig.getNanoCPUs();
+                    if (nanoCpus > 0) {
+                        // NanoCPUs는 10^9 단위 (1 CPU = 1,000,000,000 nano CPUs)
+                        // cpuQuota = (nanoCpus / 10^9) * cpuPeriod
+                        cpuPeriod = (cpuPeriod != null && cpuPeriod > 0) ? cpuPeriod : 100000L;
+                        cpuQuota = (nanoCpus * cpuPeriod) / 1_000_000_000L;
+                        log.debug("CPU limit from NanoCPUs for container {}: nanoCpus={}, calculated quota={}",
+                                containerHash, nanoCpus, cpuQuota);
+                    }
+                }
             }
         } catch (Exception e) {
             log.warn("Failed to get CPU quota/period for container {}: {}", containerHash, e.getMessage());
@@ -160,8 +176,15 @@ public class ContainerMetricsMapper {
             cpuPeriod = 100000L;
         }
 
-        if (cpuQuota == null || cpuQuota <= 0) {
-            cpuQuota = 0L;
+        // CPU 제한 여부 판단
+        boolean isCpuUnlimited = (cpuQuota == null || cpuQuota <= 0);
+
+        // cpuQuota가 0이면 무제한 -> 호스트 전체 CPU로 대체
+        if (isCpuUnlimited) {
+            Integer hostCpuCores = dockerHostInfoCache.getCpuCores();
+            cpuQuota = hostCpuCores * cpuPeriod;  // 예: 8코어 * 100000 = 800000
+            log.debug("CPU quota is unlimited for container {}, using host CPU: {} cores (quota: {})",
+                    containerHash, hostCpuCores, cpuQuota);
         }
 
         return CpuMetricsResponseDTO.builder()
@@ -172,13 +195,14 @@ public class ContainerMetricsMapper {
                 .onlineCpus(onlineCpus)
                 .cpuQuota(cpuQuota)
                 .cpuPeriod(cpuPeriod)
+                .isCpuUnlimited(isCpuUnlimited)
                 .throttlingPeriods(throttlingPeriods)
                 .throttledPeriods(throttledPeriods)
                 .throttledTime(throttledTime)
                 .build();
     }
 
-    private MemoryMetricsResponseDTO buildMemoryMetrics(Statistics stats) {
+    private MemoryMetricsResponseDTO buildMemoryMetrics(Statistics stats, String containerHash) {
         if (stats.getMemoryStats() == null) {
             return MemoryMetricsResponseDTO.builder().build();
         }
@@ -199,12 +223,31 @@ public class ContainerMetricsMapper {
             isCgroupV2 = false;
         }
 
-        log.debug("Memory stats - usage: {}, limit: {}, max_usage: {}", memUsage, memLimit, memMaxUsage);
+        // Inspect API로 메모리 제한 여부 판단
+        boolean isMemoryUnlimited = false;
+        try {
+            InspectContainerResponse inspectResponse =
+                    dockerClient.inspectContainerCmd(containerHash).exec();
+            HostConfig hostConfig = inspectResponse.getHostConfig();
+            if (hostConfig != null) {
+                Long configuredMemory = hostConfig.getMemory();
+                // Memory가 0이거나 null이면 무제한
+                isMemoryUnlimited = (configuredMemory == null || configuredMemory == 0);
+                log.debug("Memory limit for container {}: configured={}, unlimited={}",
+                        containerHash, configuredMemory, isMemoryUnlimited);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get memory limit for container {}: {}", containerHash, e.getMessage());
+        }
+
+        log.debug("Memory stats - usage: {}, limit: {}, max_usage: {}, unlimited: {}",
+                memUsage, memLimit, memMaxUsage, isMemoryUnlimited);
 
         return MemoryMetricsResponseDTO.builder()
                 .memUsage(memUsage)
                 .memLimit(memLimit)
                 .memMaxUsage(memMaxUsage)
+                .isMemoryUnlimited(isMemoryUnlimited)
                 .build();
     }
 
@@ -299,13 +342,17 @@ public class ContainerMetricsMapper {
                 }
             }
 
-            log.debug("Storage metrics - sizeRw: {}, sizeRootFs: {}, imageSize: {}, storageLimit: {}, imageName: {}",
-                    sizeRw, sizeRootFs, imageSize, storageLimit, imageName);
+            // Storage 제한 여부 판단
+            boolean isStorageUnlimited = (storageLimit == 0);
+
+            log.debug("Storage metrics - sizeRw: {}, sizeRootFs: {}, imageSize: {}, storageLimit: {}, unlimited: {}, imageName: {}",
+                    sizeRw, sizeRootFs, imageSize, storageLimit, isStorageUnlimited, imageName);
 
             return StorageMetricsResponseDTO.builder()
                     .sizeRw(sizeRw != null ? sizeRw : 0L)
                     .sizeRootFs(sizeRootFs != null ? sizeRootFs : 0L)
                     .storageLimit(storageLimit)
+                    .isStorageUnlimited(isStorageUnlimited)
                     .imageSize(imageSize)
                     .imageName(imageName)
                     .build();
@@ -316,6 +363,7 @@ public class ContainerMetricsMapper {
                     .sizeRw(sizeRw != null ? sizeRw : 0L)
                     .sizeRootFs(sizeRootFs != null ? sizeRootFs : 0L)
                     .storageLimit(0L)
+                    .isStorageUnlimited(true)  // 에러 발생 시 무제한으로 간주
                     .imageSize(0L)
                     .imageName("unknown")
                     .build();

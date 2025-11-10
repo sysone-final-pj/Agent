@@ -18,6 +18,7 @@ public class StorageMetricsResponseDTO {
 
     // Storage Limit
     private Long storageLimit;  // 컨테이너 저장 공간 제한 (--storage-opt size) - bytes, 0이면 제한 없음
+    private Boolean isStorageUnlimited;  // 스토리지 제한 없음 여부 (true: 무제한, false: 제한 있음)
 
     // Image Size
     private Long imageSize;     // 이미지 크기 - bytes

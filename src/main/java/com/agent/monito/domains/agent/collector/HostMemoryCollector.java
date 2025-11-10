@@ -1,12 +1,16 @@
 /**
  * Agent가 설치된 호스트(VM)의 메모리 및 CPU 정보를 수집하는 클래스
+ * Docker API를 사용하여 Docker가 실행되는 환경의 정보를 수집
  */
 package com.agent.monito.domains.agent.collector;
 
+import com.agent.monito.domains.agent.cache.DockerHostInfoCache;
 import com.agent.monito.domains.agent.dto.response.AgentInfoResponseDTO;
 import com.agent.monito.domains.agent.dto.response.HostDiskInfoResponseDTO;
 import com.agent.monito.domains.agent.dto.response.HostMemoryInfoResponseDTO;
+import com.github.dockerjava.api.model.Info;
 import com.sun.management.OperatingSystemMXBean;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -17,25 +21,28 @@ import java.nio.file.FileSystems;
 
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class HostMemoryCollector {
 
-    private final OperatingSystemMXBean osBean;
+    private final DockerHostInfoCache dockerHostInfoCache;
+    private final OperatingSystemMXBean osBean =
+            (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
 
     @Value("${agent.key}")
     private String agentKey;
 
-    public HostMemoryCollector() {
-        this.osBean = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
-    }
-
     /**
      * Agent 정보 수집 (연결 시 1회 전송용)
+     * Docker가 실행되는 환경의 정보를 수집
      * @return Agent 정보 DTO (agentKey, hostTotalMemory, hostCpuCores, hostTotalDisk)
      */
     public AgentInfoResponseDTO collectAgentInfo() {
         try {
-            long totalMemory = osBean.getTotalMemorySize();
-            int cpuCores = osBean.getAvailableProcessors();
+            Info dockerInfo = dockerHostInfoCache.getDockerHostInfo();
+
+            long totalMemory = dockerInfo.getMemTotal();
+            int cpuCores = dockerInfo.getNCPU();
+            // Docker API는 디스크 정보를 직접 제공하지 않으므로 FileStore 사용
             long totalDisk = getTotalDiskSpace();
 
             log.info("Agent Info - Total Memory: {} bytes, CPU Cores: {}, Total Disk: {} bytes",
@@ -61,11 +68,14 @@ public class HostMemoryCollector {
 
     /**
      * 호스트(VM)의 메모리 정보를 수집 (메트릭 전송용)
+     * 정적 정보(총 메모리)는 Docker API, 동적 정보(여유/사용 메모리)는 osBean 사용
      * @return 호스트 메모리 정보 DTO
      */
     public HostMemoryInfoResponseDTO collectHostMemory() {
         try {
-            long totalMemory = osBean.getTotalMemorySize();
+            // Docker 환경 기준 전체 메모리
+            long totalMemory = dockerHostInfoCache.getTotalMemory();
+            // 실시간 여유 메모리 (osBean)
             long freeMemory = osBean.getFreeMemorySize();
             long usedMemory = totalMemory - freeMemory;
 
