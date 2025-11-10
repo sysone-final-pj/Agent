@@ -427,11 +427,17 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
             if (!changes.getStateChanges().isEmpty()) {
                 log.info("상태 변경된 컨테이너: {}", changes.getStateChanges().size());
                 for (ContainerStateChange change : changes.getStateChanges()) {
-                    changedContainers.add(ContainerSnapshot.builder()
-                            .containerHash(change.getContainerHash())
-                            .containerName(change.getContainerName())
-                            .state(change.getNewState())
-                            .build());
+                    // 현재 컨테이너 정보에서 전체 데이터 찾기 (status 포함)
+                    ContainerSnapshot fullSnapshot = currentContainers.stream()
+                            .filter(c -> c.getContainerHash().equals(change.getContainerHash()))
+                            .findFirst()
+                            .orElse(ContainerSnapshot.builder()
+                                    .containerHash(change.getContainerHash())
+                                    .containerName(change.getContainerName())
+                                    .state(change.getNewState())
+                                    .status(change.getNewStatus())
+                                    .build());
+                    changedContainers.add(fullSnapshot);
                 }
             }
 

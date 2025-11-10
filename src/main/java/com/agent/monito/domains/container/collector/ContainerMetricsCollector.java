@@ -299,6 +299,7 @@ public class ContainerMetricsCollector {
                 String containerHash = container.getId();
                 String containerName = container.getNames()[0].replace("/", "");
                 String state = container.getState();
+                String status = container.getStatus();
                 String imageName = container.getImage();
                 Long imageSize = getImageSize(container.getImageId());
 
@@ -309,6 +310,7 @@ public class ContainerMetricsCollector {
                         .containerHash(containerHash)
                         .containerName(containerName)
                         .state(state)
+                        .status(status)
                         .imageName(imageName)
                         .imageSize(imageSize)
                         .oomKilled(oomKilled)

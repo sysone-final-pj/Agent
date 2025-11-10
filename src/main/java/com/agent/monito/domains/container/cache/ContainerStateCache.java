@@ -98,19 +98,31 @@ public class ContainerStateCache {
                 newContainers.add(current);
                 log.info("New container detected: {} ({})", current.getContainerName(), current.getState());
             } else {
-                // 2. 상태가 변경된 컨테이너 찾기
+                // 2. 상태가 변경된 컨테이너 찾기 (state 또는 status 변화)
                 ContainerSnapshot previous = containerStates.get(current.getContainerHash());
-                if (!previous.getState().equals(current.getState())) {
+                boolean stateChanged = !previous.getState().equals(current.getState());
+                boolean statusChanged = !safeEquals(previous.getStatus(), current.getStatus());
+
+                if (stateChanged || statusChanged) {
                     stateChanges.add(ContainerStateChange.builder()
                             .containerHash(current.getContainerHash())
                             .containerName(current.getContainerName())
                             .oldState(previous.getState())
                             .newState(current.getState())
+                            .oldStatus(previous.getStatus())
+                            .newStatus(current.getStatus())
                             .oomKilled(current.getOomKilled())
                             .build());
-                    log.info("State changed: {} ({} -> {}), OOMKilled: {}",
-                            current.getContainerName(), previous.getState(), current.getState(),
-                            current.getOomKilled());
+
+                    if (stateChanged) {
+                        log.info("State changed: {} ({} -> {}), OOMKilled: {}",
+                                current.getContainerName(), previous.getState(), current.getState(),
+                                current.getOomKilled());
+                    }
+                    if (statusChanged) {
+                        log.info("Status changed: {} ({} -> {})",
+                                current.getContainerName(), previous.getStatus(), current.getStatus());
+                    }
                 }
             }
         }
@@ -165,5 +177,15 @@ public class ContainerStateCache {
      */
     public int size() {
         return containerStates.size();
+    }
+
+    private boolean safeEquals(String s1, String s2) {
+        if (s1 == null && s2 == null) {
+            return true;
+        }
+        if (s1 == null || s2 == null) {
+            return false;
+        }
+        return s1.equals(s2);
     }
 }
