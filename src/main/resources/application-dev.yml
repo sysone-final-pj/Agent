@@ -28,7 +28,7 @@ jwt:
 # 스케줄링 설정
 scheduler:
   metrics-push:
-    fixed-delay: 5000      # 5초마다 실행 (밀리초)
+    fixed-delay: 4500      # 5초마다 실행 (밀리초)
     initial-delay: 10000   # 애플리케이션 시작 후 10초 뒤 첫 실행
   logs-push:
     fixed-delay: 3000     # 3초마다 실행 (밀리초)

@@ -12,6 +12,7 @@
  */
 package com.agent.monito.domains.container.stream;
 
+import com.agent.monito.domains.container.cache.InspectContainerCache;
 import com.agent.monito.domains.container.dto.collected.DetailedContainerStatsCollectedDTO;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
@@ -35,6 +36,7 @@ import java.util.stream.Collectors;
 public class ContainerStatsStreamManager {
 
     private final DockerClient dockerClient;
+    private final InspectContainerCache inspectContainerCache;
 
     // 컨테이너별 최신 통계 데이터 캐시 (Thread-safe)
     private final Map<String, DetailedContainerStatsCollectedDTO> statsCache = new ConcurrentHashMap<>();
@@ -135,13 +137,16 @@ public class ContainerStatsStreamManager {
                         return;
                     }
 
+                    // Health 정보 조회 (InspectCache 사용 - TTL 30초)
+                    String healthStatus = inspectContainerCache.getHealthStatus(containerId);
+
                     // 최신 데이터를 캐시에 저장
                     DetailedContainerStatsCollectedDTO data = DetailedContainerStatsCollectedDTO.builder()
                             .containerHash(containerId)
                             .containerName(containerName)
                             .status(status)
                             .state(state)
-                            .health("none") // TODO: health는 별도로 조회 필요
+                            .health(healthStatus)
                             .sizeRw(sizeRw)
                             .sizeRootFs(sizeRootFs)
                             .statistics(stats)
