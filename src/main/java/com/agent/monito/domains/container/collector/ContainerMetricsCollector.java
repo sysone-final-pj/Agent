@@ -4,12 +4,14 @@
  */
 package com.agent.monito.domains.container.collector;
 
+import com.agent.monito.domains.container.cache.InspectContainerCache;
 import com.agent.monito.domains.container.dto.collected.ContainerStatsCollectedDTO;
 import com.agent.monito.domains.container.dto.collected.DetailedContainerStatsCollectedDTO;
 import com.agent.monito.domains.container.state.ContainerSnapshot;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.command.InspectImageResponse;
 import com.github.dockerjava.api.command.StatsCmd;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.Statistics;
@@ -30,6 +32,7 @@ import java.util.stream.Collectors;
 public class ContainerMetricsCollector {
 
     private final DockerClient dockerClient;
+    private final InspectContainerCache inspectContainerCache;
 
     /**
      * 실행 중인 모든 컨테이너의 간단한 통계 수집
@@ -79,7 +82,17 @@ public class ContainerMetricsCollector {
             List<Container> containers = dockerClient.listContainersCmd()
                     .withShowSize(true)
                     .exec();
-            log.info("Found {} running containers", containers.size());
+
+            // Agent 자신의 컨테이너 제외
+            int originalSize = containers.size();
+            containers = containers.stream()
+                    .filter(container -> {
+                        String containerName = container.getNames()[0].replace("/", "");
+                        return !containerName.equals("agent-monito");
+                    })
+                    .collect(Collectors.toList());
+
+            log.info("Found {} running containers (excluded agent)", containers.size());
 
             List<CompletableFuture<DetailedContainerStatsCollectedDTO>> futures = containers.stream()
                     .map(container -> CompletableFuture.supplyAsync(() -> {
@@ -203,7 +216,8 @@ public class ContainerMetricsCollector {
                 }
             });
 
-            boolean completed = latch.await(3, TimeUnit.SECONDS);
+            // Docker Stats API는 기본적으로 1초 주기로 메트릭 수집
+            boolean completed = latch.await(3000, TimeUnit.MILLISECONDS);
             long elapsedTime = System.currentTimeMillis() - startTime;
 
             if (!completed) {
@@ -224,14 +238,14 @@ public class ContainerMetricsCollector {
     }
 
     /**
-     * 컨테이너의 health status 조회
+     * 컨테이너의 health status 조회 (캐시 적용)
      *
      * @param containerHash 컨테이너 ID
      * @return health status (healthy, unhealthy, starting, none, unknown)
      */
     private String getHealthStatus(String containerHash) {
         try {
-            InspectContainerResponse inspectResponse = dockerClient.inspectContainerCmd(containerHash).exec();
+            InspectContainerResponse inspectResponse = inspectContainerCache.getOrFetch(containerHash);
             InspectContainerResponse.ContainerState state = inspectResponse.getState();
 
             if (state != null && state.getHealth() != null) {
@@ -246,14 +260,14 @@ public class ContainerMetricsCollector {
     }
 
     /**
-     * 컨테이너의 OOMKilled 상태 조회
+     * 컨테이너의 OOMKilled 상태 조회 (캐시 적용)
      *
      * @param containerHash 컨테이너 ID
      * @return OOMKilled 여부
      */
     private Boolean getOOMKilledStatus(String containerHash) {
         try {
-            InspectContainerResponse inspectResponse = dockerClient.inspectContainerCmd(containerHash).exec();
+            InspectContainerResponse inspectResponse = inspectContainerCache.getOrFetch(containerHash);
             InspectContainerResponse.ContainerState state = inspectResponse.getState();
 
             if (state != null) {
@@ -293,6 +307,14 @@ public class ContainerMetricsCollector {
             List<Container> allContainers = dockerClient.listContainersCmd()
                     .withShowAll(true)
                     .exec();
+
+            // Agent 자신의 컨테이너 제외
+            allContainers = allContainers.stream()
+                    .filter(container -> {
+                        String containerName = container.getNames()[0].replace("/", "");
+                        return !containerName.equals("agent-monito");
+                    })
+                    .collect(Collectors.toList());
 
             List<ContainerSnapshot> snapshots = new ArrayList<>();
             for (Container container : allContainers) {
@@ -338,7 +360,7 @@ public class ContainerMetricsCollector {
         }
 
         try {
-            com.github.dockerjava.api.command.InspectImageResponse imageInfo =
+            InspectImageResponse imageInfo =
                     dockerClient.inspectImageCmd(imageId).exec();
             Long size = imageInfo.getSize();
             return size != null ? size : 0L;
