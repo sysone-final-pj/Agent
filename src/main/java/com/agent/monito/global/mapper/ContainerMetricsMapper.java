@@ -109,7 +109,10 @@ public class ContainerMetricsMapper {
                 .cpu(CpuMetricsResponseDTO.builder().build())
                 .memory(MemoryMetricsResponseDTO.builder().build())
                 .network(NetworkMetricsResponseDTO.builder().build())
-                .blockIO(BlockIOMetricsResponseDTO.builder().build())
+                .blockIO(BlockIOMetricsResponseDTO.builder()
+                        .blkRead(0L)
+                        .blkWrite(0L)
+                        .build())
                 .storage(StorageMetricsResponseDTO.builder()
                         .sizeRw(sizeRw != null ? sizeRw : 0L)
                         .sizeRootFs(sizeRootFs != null ? sizeRootFs : 0L)
@@ -293,7 +296,10 @@ public class ContainerMetricsMapper {
 
     private BlockIOMetricsResponseDTO buildBlockIOMetrics(Statistics stats) {
         if (stats.getBlkioStats() == null || stats.getBlkioStats().getIoServiceBytesRecursive() == null) {
-            return BlockIOMetricsResponseDTO.builder().build();
+            return BlockIOMetricsResponseDTO.builder()
+                    .blkRead(0L)
+                    .blkWrite(0L)
+                    .build();
         }
 
         long blkRead = 0L;
