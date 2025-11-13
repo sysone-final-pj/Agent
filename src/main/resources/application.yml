@@ -7,6 +7,12 @@ spring:
 server:
   port: ${SERVER_PORT:8082}
 
+# Docker 설정
+docker:
+  inspect:
+    cache:
+      ttl: 30  # inspect 결과 캐시 TTL (초 단위, 기본값: 30초)
+
 logging:
   level:
     root: INFO
