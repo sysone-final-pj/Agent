@@ -11,6 +11,7 @@ import com.agent.monito.domains.container.dto.response.ContainerLogEntryResponse
 import com.agent.monito.domains.container.dto.response.ContainerMetricsResponseDTO;
 import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
 import com.agent.monito.domains.container.dto.response.MetricsWithHostInfoResponseDTO;
+import com.agent.monito.domains.container.stream.ContainerStatsStreamManager;
 import com.agent.monito.global.mapper.ContainerLogsMapper;
 import com.agent.monito.global.mapper.ContainerMetricsMapper;
 import com.github.dockerjava.api.model.Frame;
@@ -22,37 +23,27 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ContainerServiceImpl implements ContainerService {
 
-    private final ContainerMetricsCollector containerMetricsCollector;
+    private final ContainerStatsStreamManager streamManager;
     private final ContainerLogsCollector containerLogsCollector;
     private final HostMemoryCollector hostMemoryCollector;
     private final ContainerMetricsMapper containerMetricsMapper;
     private final ContainerLogsMapper containerLogsMapper;
 
     @Override
-    public List<ContainerMetricsResponseDTO> collectAllContainerMetrics() {
-        // Collector에서 원시 데이터 수집
-        List<ContainerStatsCollectedDTO> collectedData = containerMetricsCollector.collectAllContainers();
-
-        // Mapper로 DTO 변환
-        return collectedData.stream()
-                .map(data -> containerMetricsMapper.toSimpleMetricsDTO(
-                        data.getContainerName(),
-                        data.getStatistics()
-                ))
-                .collect(Collectors.toList());
-    }
-
-    @Override
     public List<DetailedContainerMetricsResponseDTO> collectAllDetailedContainerMetrics() {
-        // Collector에서 원시 데이터 수집
-        List<DetailedContainerStatsCollectedDTO> collectedData =
-                containerMetricsCollector.collectAllDetailedContainers();
+        // StreamManager의 캐시에서 최신 데이터 조회
+        List<DetailedContainerStatsCollectedDTO> collectedData = streamManager.getAllLatestStats();
+
+        log.debug("📊 StreamManager에서 {}개 컨테이너 데이터 조회 (캐시 크기: {})",
+                collectedData.size(), streamManager.getCacheSize());
 
         // Mapper로 DTO 변환
         return collectedData.stream()

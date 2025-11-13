@@ -14,7 +14,6 @@ import java.util.Map;
 
 public interface ContainerService {
 
-    List<ContainerMetricsResponseDTO> collectAllContainerMetrics();
     List<DetailedContainerMetricsResponseDTO> collectAllDetailedContainerMetrics();
     MetricsWithHostInfoResponseDTO collectMetricsWithHostInfo();
     Map<String, List<ContainerLogEntryResponseDTO>> collectAllContainerLogs(int tailLines);

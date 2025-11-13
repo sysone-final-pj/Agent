@@ -8,6 +8,7 @@ package com.agent.monito.domains.container.scheduler;
 import com.agent.monito.domains.agent.client.AgentWebSocketClient;
 import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
 import com.agent.monito.domains.container.service.ContainerService;
+import com.agent.monito.domains.container.stream.ContainerStatsStreamManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -22,6 +23,7 @@ public class MetricsPushScheduler {
 
     private final ContainerService containerService;
     private final AgentWebSocketClient webSocketClient;
+    private final ContainerStatsStreamManager streamManager;
 
     /**
      * 주기적으로 컨테이너 메트릭을 수집하여 WebSocket으로 전송
@@ -42,10 +44,13 @@ public class MetricsPushScheduler {
         try {
             log.debug("컨테이너 메트릭 수집 시작...");
 
+            // 0. 스트림 동기화: 새 컨테이너 감지 및 스트림 시작/종료
+            streamManager.syncWithRunningContainers();
+
             // 1. 메트릭 수집 전: 상태 변화 감지 (컨테이너 생성/종료/상태 변경)
             webSocketClient.detectAndSendStateChanges();
 
-            // 2. 컨테이너 메트릭 수집
+            // 2. 컨테이너 메트릭 수집 (StreamManager 캐시에서 조회)
             List<DetailedContainerMetricsResponseDTO> metrics =
                 containerService.collectAllDetailedContainerMetrics();
 
@@ -54,7 +59,8 @@ public class MetricsPushScheduler {
                 return;
             }
 
-            log.info("{}개의 컨테이너 메트릭 수집 완료. Backend로 전송 중...", metrics.size());
+            log.info("{}개의 컨테이너 메트릭 수집 완료 (활성 스트림: {}개). Backend로 전송 중...",
+                    metrics.size(), streamManager.getActiveStreamCount());
 
             // 3. 수집 후 다시 연결 상태 확인 (race condition 방지)
             if (!webSocketClient.isReady()) {
