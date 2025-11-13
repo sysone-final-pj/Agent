@@ -8,6 +8,7 @@ import com.agent.monito.domains.container.cache.InspectContainerCache;
 import com.agent.monito.domains.container.dto.collected.ContainerStatsCollectedDTO;
 import com.agent.monito.domains.container.dto.collected.DetailedContainerStatsCollectedDTO;
 import com.agent.monito.domains.container.state.ContainerSnapshot;
+import com.agent.monito.global.util.ContainerFilterUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
@@ -84,12 +85,8 @@ public class ContainerMetricsCollector {
                     .exec();
 
             // Agent 자신의 컨테이너 제외
-            int originalSize = containers.size();
             containers = containers.stream()
-                    .filter(container -> {
-                        String containerName = container.getNames()[0].replace("/", "");
-                        return !containerName.equals("agent-monito");
-                    })
+                    .filter(ContainerFilterUtil::isNotAgentContainer)
                     .collect(Collectors.toList());
 
             log.info("Found {} running containers (excluded agent)", containers.size());
@@ -288,10 +285,7 @@ public class ContainerMetricsCollector {
 
             // Agent 자신의 컨테이너 제외
             allContainers = allContainers.stream()
-                    .filter(container -> {
-                        String containerName = container.getNames()[0].replace("/", "");
-                        return !containerName.equals("agent-monito");
-                    })
+                    .filter(ContainerFilterUtil::isNotAgentContainer)
                     .collect(Collectors.toList());
 
             List<ContainerSnapshot> snapshots = new ArrayList<>();

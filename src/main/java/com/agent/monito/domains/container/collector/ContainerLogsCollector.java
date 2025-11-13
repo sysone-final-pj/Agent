@@ -5,6 +5,7 @@
 package com.agent.monito.domains.container.collector;
 
 import com.agent.monito.domains.container.dto.collected.ContainerLogsCollectedDTO;
+import com.agent.monito.global.util.ContainerFilterUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.LogContainerCmd;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
@@ -52,8 +54,13 @@ public class ContainerLogsCollector {
         Map<String, ContainerLogsCollectedDTO> allLogs = new HashMap<>();
 
         try {
-            List<Container> containers = dockerClient.listContainersCmd().exec();
-            log.info("Found {} running containers for log collection", containers.size());
+            // Agent 컨테이너 제외하고 조회
+            List<Container> containers = dockerClient.listContainersCmd().exec()
+                    .stream()
+                    .filter(ContainerFilterUtil::isNotAgentContainer)
+                    .collect(Collectors.toList());
+
+            log.info("Found {} running containers for log collection (excluded agent)", containers.size());
 
             for (Container container : containers) {
                 String containerHash = container.getId();
