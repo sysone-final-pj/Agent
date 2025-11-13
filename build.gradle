@@ -26,7 +26,6 @@ repositories {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-webflux' // WebClient 지원
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
 	compileOnly 'org.projectlombok:lombok'
@@ -36,10 +35,6 @@ dependencies {
 	// Docker Java API - OkHttp transport
 	implementation 'com.github.docker-java:docker-java:3.3.4'
 	implementation 'com.github.docker-java:docker-java-transport-okhttp:3.3.4'
-	// JWT (토큰 생성/검증)
-	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
-	implementation 'io.jsonwebtoken:jjwt-impl:0.11.5'
-	implementation 'io.jsonwebtoken:jjwt-jackson:0.11.5'
 }
 
 tasks.named('test') {

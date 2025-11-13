@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -409,7 +410,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
             StateChangeResult changes = containerStateCache.detectChanges(currentContainers);
 
             // 상태 변경 메시지 전송
-            List<ContainerSnapshot> changedContainers = new java.util.ArrayList<>();
+            List<ContainerSnapshot> changedContainers = new ArrayList<>();
 
             // 새로 생성된 컨테이너
             if (!changes.getNewContainers().isEmpty()) {

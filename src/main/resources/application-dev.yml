@@ -21,14 +21,10 @@ docker:
   tls-verify: ${DOCKER_TLS_VERIFY:false}
   cert-path: ${DOCKER_CERT_PATH:}
 
-# JWT 설정
-jwt:
-  secret: ${JWT_SECRET:my-super-secret-key-for-agent-authentication-1234567890}
-
 # 스케줄링 설정
 scheduler:
   metrics-push:
-    fixed-delay: 5000      # 5초마다 실행 (밀리초)
+    fixed-delay: 4500      # 5초마다 실행 (밀리초)
     initial-delay: 10000   # 애플리케이션 시작 후 10초 뒤 첫 실행
   logs-push:
     fixed-delay: 3000     # 3초마다 실행 (밀리초)
@@ -45,7 +41,6 @@ logging:
   level:
     root: INFO
     com.agent.monito: DEBUG
-    com.agent.monito.global.jwt.JwtTokenProvider: DEBUG
 
 # 참고: 여러 Agent를 동시에 실행하려면
 # java -jar agent.jar --spring.profiles.active=dev --server.port=8082 --agent.id=test-agent-002

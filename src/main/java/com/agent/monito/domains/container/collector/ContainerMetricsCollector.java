@@ -100,7 +100,7 @@ public class ContainerMetricsCollector {
                         String containerName = container.getNames()[0].replace("/", "");
                         String status = cleanStatus(container.getStatus());
                         String state = container.getState();
-                        String health = getHealthStatus(containerHash);
+                        String health = inspectContainerCache.getHealthStatus(containerHash);
                         Long sizeRw = container.getSizeRw();
                         Long sizeRootFs = container.getSizeRootFs();
                         log.info("Collecting detailed stats for container: {}", containerName);
@@ -234,28 +234,6 @@ public class ContainerMetricsCollector {
         } catch (Exception e) {
             log.error("Failed to collect detailed stats for {}", containerName, e);
             return null;
-        }
-    }
-
-    /**
-     * 컨테이너의 health status 조회 (캐시 적용)
-     *
-     * @param containerHash 컨테이너 ID
-     * @return health status (healthy, unhealthy, starting, none, unknown)
-     */
-    private String getHealthStatus(String containerHash) {
-        try {
-            InspectContainerResponse inspectResponse = inspectContainerCache.getOrFetch(containerHash);
-            InspectContainerResponse.ContainerState state = inspectResponse.getState();
-
-            if (state != null && state.getHealth() != null) {
-                String healthStatus = state.getHealth().getStatus();
-                return healthStatus != null ? healthStatus : "none";
-            }
-            return "none";
-        } catch (Exception e) {
-            log.warn("Failed to get health status for container {}: {}", containerHash, e.getMessage());
-            return "unknown";
         }
     }
 

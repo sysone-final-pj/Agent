@@ -153,6 +153,28 @@ public class InspectContainerCache {
     }
 
     /**
+     * 컨테이너의 health status 조회 (캐시 적용)
+     *
+     * @param containerHash 컨테이너 ID
+     * @return health status (healthy, unhealthy, starting, none, unknown)
+     */
+    public String getHealthStatus(String containerHash) {
+        try {
+            InspectContainerResponse inspectResponse = getOrFetch(containerHash);
+            InspectContainerResponse.ContainerState state = inspectResponse.getState();
+
+            if (state != null && state.getHealth() != null) {
+                String healthStatus = state.getHealth().getStatus();
+                return healthStatus != null ? healthStatus : "none";
+            }
+            return "none";
+        } catch (Exception e) {
+            log.warn("Failed to get health status for container {}: {}", containerHash, e.getMessage());
+            return "unknown";
+        }
+    }
+
+    /**
      * 캐시된 inspect 응답을 담는 내부 클래스
      */
     @Getter

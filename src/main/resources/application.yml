@@ -17,4 +17,3 @@ logging:
   level:
     root: INFO
     com.agent.monito: DEBUG
-    com.agent.monito.global.jwt.JwtTokenProvider: DEBUG
