@@ -323,7 +323,8 @@ public class ContainerMetricsCollector {
                 String state = container.getState();
                 String status = container.getStatus();
                 String imageName = container.getImage();
-                Long imageSize = getImageSize(container.getImageId());
+                String imageId = container.getImageId();
+                Long imageSize = getImageSize(imageId);
 
                 // OOMKilled 정보 수집
                 Boolean oomKilled = getOOMKilledStatus(containerHash);
@@ -334,6 +335,7 @@ public class ContainerMetricsCollector {
                         .state(state)
                         .status(status)
                         .imageName(imageName)
+                        .imageId(imageId)
                         .imageSize(imageSize)
                         .oomKilled(oomKilled)
                         .build());
