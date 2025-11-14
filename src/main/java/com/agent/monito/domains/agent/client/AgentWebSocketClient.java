@@ -138,10 +138,15 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
                 break;
 
             case "AGENT_INFO_ACK":
-                log.debug("Agent 메타데이터 수신");
+                log.debug("Agent 메타데이터 ACK 수신");
                 break;
+
+            case "CONTAINER_SYNC_ACK":
+                log.debug("컨테이너 동기화 ACK 수신");
+                break;
+
             case "CONTAINER_STATE_CHANGE_ACK":
-                log.debug("container 상태 변경 수신");
+                log.debug("컨테이너 상태 변경 ACK 수신");
                 break;
 
             case "PONG":
@@ -328,7 +333,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
     }
 
     /**
-     * 컨테이너 상태 변경 메시지 전송 (Scheduler 또는 초기 동기화에서 호출)
+     * 컨테이너 상태 변경 메시지 전송 (Scheduler에서 호출)
      */
     public void sendContainerStateChangeMessage(List<ContainerSnapshot> containers) throws Exception {
         if (!isConnectedAndAuthenticated()) {
@@ -356,6 +361,34 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
     }
 
     /**
+     * 초기 컨테이너 동기화 메시지 전송 (인증 성공 직후 한 번만 호출)
+     */
+    private void sendContainerSyncMessage(List<ContainerSnapshot> containers) throws Exception {
+        if (!isConnectedAndAuthenticated()) {
+            throw new IllegalStateException("Not connected or authenticated");
+        }
+
+        if (containers == null || containers.isEmpty()) {
+            log.info("동기화할 컨테이너가 없습니다.");
+            return;
+        }
+
+        Map<String, Object> message = Map.of(
+                "type", "CONTAINER_SYNC",
+                "data", Map.of(
+                        "agentKey", agentKey,
+                        "containers", containers,
+                        "timestamp", System.currentTimeMillis()
+                )
+        );
+
+        String json = objectMapper.writeValueAsString(message);
+        log.debug("전송할 JSON (컨테이너 동기화): {}", json);
+
+        sendWebSocketMessage(new TextMessage(json));
+    }
+
+    /**
      * 초기 컨테이너 상태 동기화 (인증 성공 직후 호출)
      * 모든 컨테이너의 현재 상태를 BE에 전송하고 캐시에 저장
      */
@@ -374,13 +407,13 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
                 return;
             }
 
-            // CONTAINER_STATE_CHANGE 메시지 전송
-            sendContainerStateChangeMessage(allContainers);
+            // CONTAINER_SYNC 메시지 전송 (초기 동기화는 SYNC 메시지 사용)
+            sendContainerSyncMessage(allContainers);
 
             // 캐시에 저장 (다음 상태 변화 감지를 위해)
             containerStateCache.updateStates(allContainers);
 
-            log.info("✓ 컨테이너 상태 동기화 완료 ({개})", allContainers.size());
+            log.info("✓ 컨테이너 상태 동기화 완료 ({}개)", allContainers.size());
             log.info("   - 컨테이너 목록:");
             for (ContainerSnapshot snapshot : allContainers) {
                 log.info("     • {} ({})", snapshot.getContainerName(), snapshot.getState());
