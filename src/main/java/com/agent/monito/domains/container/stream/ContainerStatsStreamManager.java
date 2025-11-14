@@ -14,6 +14,7 @@ package com.agent.monito.domains.container.stream;
 
 import com.agent.monito.domains.container.cache.InspectContainerCache;
 import com.agent.monito.domains.container.dto.collected.DetailedContainerStatsCollectedDTO;
+import com.agent.monito.global.util.ContainerFilterUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.StatsCmd;
@@ -76,10 +77,7 @@ public class ContainerStatsStreamManager {
                     .withShowSize(true)
                     .exec()
                     .stream()
-                    .filter(container -> {
-                        String containerName = container.getNames()[0].replace("/", "");
-                        return !containerName.equals("agent-monito");
-                    })
+                    .filter(ContainerFilterUtil::isNotAgentContainer)
                     .collect(Collectors.toList());
 
             Set<String> currentContainerIds = containers.stream()

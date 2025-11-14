@@ -2,13 +2,10 @@ package com.agent.monito.domains.container.service;
 
 import com.agent.monito.domains.agent.collector.HostMemoryCollector;
 import com.agent.monito.domains.agent.dto.response.HostMemoryInfoResponseDTO;
-import com.agent.monito.domains.container.collector.ContainerMetricsCollector;
 import com.agent.monito.domains.container.collector.ContainerLogsCollector;
 import com.agent.monito.domains.container.dto.collected.ContainerLogsCollectedDTO;
-import com.agent.monito.domains.container.dto.collected.ContainerStatsCollectedDTO;
 import com.agent.monito.domains.container.dto.collected.DetailedContainerStatsCollectedDTO;
 import com.agent.monito.domains.container.dto.response.ContainerLogEntryResponseDTO;
-import com.agent.monito.domains.container.dto.response.ContainerMetricsResponseDTO;
 import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
 import com.agent.monito.domains.container.dto.response.MetricsWithHostInfoResponseDTO;
 import com.agent.monito.domains.container.stream.ContainerStatsStreamManager;
