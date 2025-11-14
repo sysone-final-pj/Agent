@@ -3,7 +3,7 @@ package com.agent.monito.domains.agent.client;
 import com.agent.monito.domains.agent.collector.HostMemoryCollector;
 import com.agent.monito.domains.agent.dto.response.AgentInfoResponseDTO;
 import com.agent.monito.domains.container.cache.ContainerStateCache;
-import com.agent.monito.domains.container.collector.ContainerMetricsCollector;
+import com.agent.monito.domains.container.collector.ContainerSnapshotCollector;
 import com.agent.monito.domains.container.dto.response.ContainerLogEntryResponseDTO;
 import com.agent.monito.domains.container.dto.response.DetailedContainerMetricsResponseDTO;
 import com.agent.monito.domains.container.state.ContainerSnapshot;
@@ -36,7 +36,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
 
     private final HostMemoryCollector hostMemoryCollector;
     private final ContainerStateCache containerStateCache;
-    private final ContainerMetricsCollector containerMetricsCollector;
+    private final ContainerSnapshotCollector containerSnapshotCollector;
     private final ObjectMapper objectMapper;
 
     @Value("${agent.key}")
@@ -366,7 +366,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
 
             // 모든 컨테이너 상태 수집 (실행 중 + 종료됨)
             List<ContainerSnapshot> allContainers =
-                    containerMetricsCollector.collectAllContainerSnapshots();
+                    containerSnapshotCollector.collectAllContainerSnapshots();
 
             if (allContainers.isEmpty()) {
                 log.info("컨테이너가 없습니다.");
@@ -404,7 +404,7 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
 
             // 현재 모든 컨테이너 상태 수집
             List<ContainerSnapshot> currentContainers =
-                    containerMetricsCollector.collectAllContainerSnapshots();
+                    containerSnapshotCollector.collectAllContainerSnapshots();
 
             // 이전 상태와 비교하여 변화 감지
             StateChangeResult changes = containerStateCache.detectChanges(currentContainers);
