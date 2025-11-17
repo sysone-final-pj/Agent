@@ -245,6 +245,13 @@ public class ContainerMetricsMapper {
             log.warn("Failed to get memory limit for container {}: {}", containerHash, e.getMessage());
         }
 
+        // memLimit가 null이면 무제한 -> 호스트 전체 메모리로 대체
+        if (isMemoryUnlimited && memLimit == null) {
+            memLimit = dockerHostInfoCache.getTotalMemory();
+            log.debug("Memory limit is unlimited for container {}, using host memory: {} bytes",
+                    containerHash, memLimit);
+        }
+
         log.debug("Memory stats - usage: {}, limit: {}, max_usage: {}, unlimited: {}",
                 memUsage, memLimit, memMaxUsage, isMemoryUnlimited);
 
