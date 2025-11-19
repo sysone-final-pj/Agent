@@ -368,9 +368,9 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
             throw new IllegalStateException("Not connected or authenticated");
         }
 
-        if (containers == null || containers.isEmpty()) {
-            log.info("동기화할 컨테이너가 없습니다.");
-            return;
+        // 컨테이너가 없어도 서버에 빈 배열을 전송하여 상태를 알림
+        if (containers == null) {
+            containers = List.of();
         }
 
         Map<String, Object> message = Map.of(
@@ -401,22 +401,20 @@ public class AgentWebSocketClient extends TextWebSocketHandler {
             List<ContainerSnapshot> allContainers =
                     containerSnapshotCollector.collectAllContainerSnapshots();
 
-            if (allContainers.isEmpty()) {
-                log.info("컨테이너가 없습니다.");
-                log.info("═══════════════════════════════════════");
-                return;
-            }
-
-            // CONTAINER_SYNC 메시지 전송 (초기 동기화는 SYNC 메시지 사용)
+            // CONTAINER_SYNC 메시지 전송 (빈 배열도 전송하여 서버에 상태 알림)
             sendContainerSyncMessage(allContainers);
 
             // 캐시에 저장 (다음 상태 변화 감지를 위해)
             containerStateCache.updateStates(allContainers);
 
-            log.info("✓ 컨테이너 상태 동기화 완료 ({}개)", allContainers.size());
-            log.info("   - 컨테이너 목록:");
-            for (ContainerSnapshot snapshot : allContainers) {
-                log.info("     • {} ({})", snapshot.getContainerName(), snapshot.getState());
+            if (allContainers.isEmpty()) {
+                log.info("✓ 컨테이너 상태 동기화 완료 (컨테이너 없음)");
+            } else {
+                log.info("✓ 컨테이너 상태 동기화 완료 ({}개)", allContainers.size());
+                log.info("   - 컨테이너 목록:");
+                for (ContainerSnapshot snapshot : allContainers) {
+                    log.info("     • {} ({})", snapshot.getContainerName(), snapshot.getState());
+                }
             }
             log.info("═══════════════════════════════════════");
 
