@@ -44,10 +44,13 @@ public class ContainerLogsMapper {
             // source 파싱 (stdout, stderr, raw)
             String source = logParser.parseSource(frame.getStreamType()).toUpperCase();
 
+            // UTC 타임스탬프를 KST로 변환 (이미 KST면 그대로 반환)
+            String kstTimestamp = logParser.convertToKST(parsedLog.getTimestamp());
+
             return ContainerLogEntryResponseDTO.builder()
                     .message(parsedLog.getMessage())
                     .source(source)
-                    .timestamp(parsedLog.getTimestamp())
+                    .timestamp(kstTimestamp)
                     .build();
 
         } catch (Exception e) {

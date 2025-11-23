@@ -21,8 +21,9 @@ public class ContainerLogEntryResponseDTO {
     private String source;
 
     /**
-     * 로그 발생 시각 (Docker 타임스탬프)
-     * ISO 8601 형식: 2025-10-29T00:47:41.599847751Z
+     * 로그 발생 시각 (KST LocalDateTime)
+     * ISO 8601 LocalDateTime 형식: 2025-11-24T09:47:41.599847751
+     * UTC 타임스탬프를 KST로 변환 후 타임존 정보 제거
      */
     private String timestamp;
 }
