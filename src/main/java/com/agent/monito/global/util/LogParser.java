@@ -76,13 +76,13 @@ public class LogParser {
     }
 
     /**
-     * ISO 8601 타임스탬프를 KST로 변환
-     * - 이미 KST(+09:00)인 경우: 그대로 반환
-     * - UTC(Z)인 경우: KST로 변환
-     * - 기타 타임존: KST로 변환
+     * ISO 8601 타임스탬프를 KST LocalDateTime으로 변환 (타임존 정보 제거)
+     * - UTC(Z)인 경우: KST로 변환 후 LocalDateTime 형식으로 반환
+     * - 기타 타임존: KST로 변환 후 LocalDateTime 형식으로 반환
      *
      * @param timestamp ISO 8601 형식의 타임스탬프
-     * @return KST로 변환된 타임스탬프 (ISO 8601 형식)
+     * @return KST로 변환된 타임스탬프 (LocalDateTime 형식, 타임존 정보 없음)
+     *         예: 2025-11-24T00:02:18.272843854
      */
     public String convertToKST(String timestamp) {
         if (timestamp == null || timestamp.isEmpty()) {
@@ -90,16 +90,12 @@ public class LogParser {
         }
 
         try {
-            // 이미 KST(+09:00)인지 빠르게 체크 (성능 최적화)
-            if (timestamp.contains("+09:00")) {
-                return timestamp;
-            }
-
             // ISO 8601 파싱 후 KST로 변환
             ZonedDateTime zonedDateTime = ZonedDateTime.parse(timestamp, ISO_FORMATTER);
             ZonedDateTime kstTime = zonedDateTime.withZoneSameInstant(KST_ZONE);
 
-            return kstTime.format(ISO_FORMATTER);
+            // LocalDateTime 형식으로 반환 (타임존 정보 제거)
+            return kstTime.toLocalDateTime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
 
         } catch (Exception e) {
             log.warn("Failed to convert timestamp to KST: {}, returning original", timestamp);
