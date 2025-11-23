@@ -10,6 +10,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.ZonedDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -20,6 +23,8 @@ public class LogParser {
     // Docker 타임스탬프 정규식 패턴 (2025-10-29T00:47:41.599847751Z)
     private static final Pattern TIMESTAMP_PATTERN =
             Pattern.compile("^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+Z)\\s*(.*)$");
+    private static final ZoneId KST_ZONE = ZoneId.of("Asia/Seoul");
+    private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
 
     /**
      * Docker 로그 원시 문자열에서 타임스탬프와 메시지 분리
@@ -67,6 +72,38 @@ public class LogParser {
             case RAW:
             default:
                 return "raw";
+        }
+    }
+
+    /**
+     * ISO 8601 타임스탬프를 KST로 변환
+     * - 이미 KST(+09:00)인 경우: 그대로 반환
+     * - UTC(Z)인 경우: KST로 변환
+     * - 기타 타임존: KST로 변환
+     *
+     * @param timestamp ISO 8601 형식의 타임스탬프
+     * @return KST로 변환된 타임스탬프 (ISO 8601 형식)
+     */
+    public String convertToKST(String timestamp) {
+        if (timestamp == null || timestamp.isEmpty()) {
+            return timestamp;
+        }
+
+        try {
+            // 이미 KST(+09:00)인지 빠르게 체크 (성능 최적화)
+            if (timestamp.contains("+09:00")) {
+                return timestamp;
+            }
+
+            // ISO 8601 파싱 후 KST로 변환
+            ZonedDateTime zonedDateTime = ZonedDateTime.parse(timestamp, ISO_FORMATTER);
+            ZonedDateTime kstTime = zonedDateTime.withZoneSameInstant(KST_ZONE);
+
+            return kstTime.format(ISO_FORMATTER);
+
+        } catch (Exception e) {
+            log.warn("Failed to convert timestamp to KST: {}, returning original", timestamp);
+            return timestamp; // 파싱 실패 시 원본 반환
         }
     }
 
