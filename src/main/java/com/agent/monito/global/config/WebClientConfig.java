@@ -15,7 +15,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
-
+/**
+ 작성자: 백승준
+ */
 @Configuration
 @Slf4j
 public class WebClientConfig {

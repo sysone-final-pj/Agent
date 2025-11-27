@@ -1,7 +1,9 @@
 package com.agent.monito.global.exception;
 
 import lombok.Getter;
-
+/**
+ 작성자: 백승준
+ */
 @Getter
 public class BadRequestException extends RuntimeException {
     private final ExceptionMessage exceptionMessage;

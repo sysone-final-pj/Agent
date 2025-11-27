@@ -8,7 +8,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
-
+/**
+ 작성자: 백승준
+ */
 @Builder
 @ToString
 @NoArgsConstructor

@@ -6,7 +6,9 @@ package com.agent.monito.domains.container.state;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-
+/**
+ 작성자: 백승준
+ */
 @Getter
 @Builder
 @AllArgsConstructor

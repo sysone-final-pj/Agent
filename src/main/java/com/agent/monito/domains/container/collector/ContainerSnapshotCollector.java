@@ -18,7 +18,9 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-
+/**
+ 작성자: 백승준
+ */
 @Component
 @Slf4j
 @RequiredArgsConstructor

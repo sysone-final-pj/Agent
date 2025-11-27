@@ -14,7 +14,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
+/**
+ 작성자: 백승준
+ */
 @Slf4j
 @Component
 public class ContainerLogTimestampCache {
