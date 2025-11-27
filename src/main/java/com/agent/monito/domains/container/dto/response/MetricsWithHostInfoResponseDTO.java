@@ -12,7 +12,9 @@ import com.agent.monito.domains.agent.dto.response.HostMemoryInfoResponseDTO;
 import lombok.*;
 
 import java.util.List;
-
+/**
+ 작성자: 백승준
+ */
 @Getter
 @Builder
 @AllArgsConstructor(access = AccessLevel.PRIVATE)

@@ -4,7 +4,9 @@
 package com.agent.monito.domains.agent.dto.response;
 
 import lombok.*;
-
+/**
+ 작성자: 백승준
+ */
 @Getter
 @Builder
 @AllArgsConstructor(access = AccessLevel.PRIVATE)

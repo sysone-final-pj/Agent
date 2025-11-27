@@ -16,7 +16,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
-
+/**
+ 작성자: 백승준
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -35,6 +37,8 @@ public class LogsPushScheduler {
         initialDelayString = "${scheduler.logs-push.initial-delay}"
     )
     public void pushLogs() {
+        long startTime = System.currentTimeMillis();
+
         // 연결 및 인증 상태 확인
         if (!webSocketClient.isReady()) {
             log.warn("WebSocket 연결 또는 인증 상태 아님. 로그 전송 생략.");
@@ -56,6 +60,8 @@ public class LogsPushScheduler {
 
             if (logs.isEmpty()) {
                 log.debug("수집된 로그가 없습니다. 전송 생략.");
+                long elapsed = System.currentTimeMillis() - startTime;
+                log.debug("로그 수집 소요 시간: {}ms", elapsed);
                 return;
             }
 
@@ -87,18 +93,23 @@ public class LogsPushScheduler {
             // 수집 후 다시 연결 상태 확인 (race condition 방지)
             if (!webSocketClient.isReady()) {
                 log.warn("로그 수집 중 연결이 끊어졌습니다. 다음 주기에 재시도합니다.");
+                long elapsed = System.currentTimeMillis() - startTime;
+                log.debug("로그 수집 소요 시간: {}ms", elapsed);
                 return;
             }
 
             // WebSocket으로 전송
             webSocketClient.sendLogsMessage(logs);
 
-            log.info("✓ {}개 컨테이너의 {}개 로그 전송 완료", logs.size(), totalLogCount);
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.info("✓ {}개 컨테이너의 {}개 로그 전송 완료 (소요 시간: {}ms)", logs.size(), totalLogCount, elapsed);
 
         } catch (IllegalStateException e) {
-            log.error("WebSocket 세션이 닫혔습니다: {}", e.getMessage());
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.error("WebSocket 세션이 닫혔습니다: {} (소요 시간: {}ms)", e.getMessage(), elapsed);
         } catch (Exception e) {
-            log.error("로그 수집/전송 실패: {}", e.getMessage(), e);
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.error("로그 수집/전송 실패: {} (소요 시간: {}ms)", e.getMessage(), elapsed, e);
         }
     }
 }

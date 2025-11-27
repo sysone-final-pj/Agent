@@ -15,7 +15,9 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
+/**
+ 작성자: 백승준
+ */
 @Slf4j
 @Component
 public class LogParser {

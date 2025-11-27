@@ -22,7 +22,9 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
+/**
+ 작성자: 백승준
+ */
 @Component
 @Slf4j
 @RequiredArgsConstructor

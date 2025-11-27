@@ -18,7 +18,9 @@ import org.springframework.stereotype.Component;
 import java.lang.management.ManagementFactory;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
-
+/**
+ 작성자: 백승준
+ */
 @Component
 @Slf4j
 @RequiredArgsConstructor

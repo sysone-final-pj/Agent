@@ -28,7 +28,9 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
-
+/**
+ 작성자: 백승준
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor

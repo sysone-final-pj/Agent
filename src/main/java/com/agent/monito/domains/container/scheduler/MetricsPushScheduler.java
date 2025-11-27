@@ -15,7 +15,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-
+/**
+ 작성자: 백승준
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -35,6 +37,8 @@ public class MetricsPushScheduler {
         initialDelayString = "${scheduler.metrics-push.initial-delay}"
     )
     public void pushMetrics() {
+        long startTime = System.currentTimeMillis();
+
         // 연결 및 인증 상태 확인
         if (!webSocketClient.isReady()) {
             log.warn("WebSocket 연결 또는 인증 상태 아님. 메트릭 전송 생략.");
@@ -56,6 +60,8 @@ public class MetricsPushScheduler {
 
             if (metrics.isEmpty()) {
                 log.debug("실행 중인 컨테이너가 없습니다. 메트릭 전송 생략.");
+                long elapsed = System.currentTimeMillis() - startTime;
+                log.debug("메트릭 수집 소요 시간: {}ms", elapsed);
                 return;
             }
 
@@ -65,18 +71,23 @@ public class MetricsPushScheduler {
             // 3. 수집 후 다시 연결 상태 확인 (race condition 방지)
             if (!webSocketClient.isReady()) {
                 log.warn("메트릭 수집 중 연결이 끊어졌습니다. 다음 주기에 재시도합니다.");
+                long elapsed = System.currentTimeMillis() - startTime;
+                log.debug("메트릭 수집 소요 시간: {}ms", elapsed);
                 return;
             }
 
             // 4. WebSocket으로 메트릭 전송
             webSocketClient.sendMetricsMessage(metrics);
 
-            log.info("✓ {}개의 컨테이너 메트릭 전송 완료", metrics.size());
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.info("✓ {}개의 컨테이너 메트릭 전송 완료 (소요 시간: {}ms)", metrics.size(), elapsed);
 
         } catch (IllegalStateException e) {
-            log.error("WebSocket 세션이 닫혔습니다: {}", e.getMessage());
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.error("WebSocket 세션이 닫혔습니다: {} (소요 시간: {}ms)", e.getMessage(), elapsed);
         } catch (Exception e) {
-            log.error("메트릭 수집/전송 실패: {}", e.getMessage(), e);
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.error("메트릭 수집/전송 실패: {} (소요 시간: {}ms)", e.getMessage(), elapsed, e);
         }
     }
 }
